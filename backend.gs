@@ -245,6 +245,9 @@ function doPost(e) {
       case 'addPurchase':
         result = addRowToSheet(SHEET_PURCHASES, [data.id, data.date, data.itemName, data.unit, data.quantity, data.totalPrice]);
         break;
+      case 'editPurchase':
+        result = editRowById(SHEET_PURCHASES, data.id, [data.id, data.date, data.itemName, data.unit, data.quantity, data.totalPrice]);
+        break;
       case 'deletePurchase':
         result = deleteRowById(SHEET_PURCHASES, data.id);
         break;
@@ -359,6 +362,24 @@ function deleteRowById(sheetName, id) {
     }
   }
   throw new Error("ID not found in " + sheetName);
+}
+
+/**
+ * Edits a row based on the ID in the first column.
+ */
+function editRowById(sheetName, id, newRowData) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] == id) {
+      const range = sheet.getRange(i + 1, 1, 1, newRowData.length);
+      range.setValues([newRowData]);
+      return { message: "Row edited successfully" };
+    }
+  }
+  throw new Error("ID not found for edit in " + sheetName);
 }
 
 // ==========================================
