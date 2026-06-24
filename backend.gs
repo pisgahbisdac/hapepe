@@ -55,8 +55,8 @@ function setup() {
   let recipesSheet = ss.getSheetByName(SHEET_RECIPES);
   if (!recipesSheet) {
     recipesSheet = ss.insertSheet(SHEET_RECIPES);
-    recipesSheet.appendRow(['ID', 'MenuName', 'TargetMarginPercent', 'Ingredients']);
-    recipesSheet.getRange("A1:D1").setFontWeight("bold");
+    recipesSheet.appendRow(['ID', 'MenuName', 'TargetMarginPercent', 'ImageUrl', 'YieldQty', 'YieldUnit', 'YieldType', 'Bahan 1', 'Qty 1', 'Satuan 1']);
+    recipesSheet.getRange("A1:J1").setFontWeight("bold");
   }
   
   // Delete the default "Sheet1" if it exists
@@ -119,22 +119,61 @@ function doGet(e) {
       amount: Number(row.Amount)
     }));
 
-    // Read Recipes
-    const recipesData = readSheetData(ss.getSheetByName(SHEET_RECIPES));
-    const recipes = recipesData.map(row => {
-      let ingredients = [];
-      try {
-        ingredients = JSON.parse(row.Ingredients || '[]');
-      } catch (err) {
-        ingredients = [];
+    // Read Recipes (Custom logic for separated columns)
+    const recipesSheet = ss.getSheetByName(SHEET_RECIPES);
+    const recipesRawData = recipesSheet ? recipesSheet.getDataRange().getValues() : [];
+    const recipes = [];
+    if (recipesRawData.length > 1) {
+      for (let i = 1; i < recipesRawData.length; i++) {
+        const row = recipesRawData[i];
+        if (!row[0]) continue;
+        
+        let ingredients = [];
+        
+        // Cek apakah data lama (JSON string di kolom ke-4/index 3)
+        if (String(row[3]).trim().startsWith('[')) {
+          try { ingredients = JSON.parse(row[3]); } catch(e){}
+          recipes.push({
+            id: row[0],
+            menuName: row[1],
+            targetMarginPercent: Number(row[2]),
+            imageUrl: '',
+            ingredients: ingredients
+          });
+          continue;
+        }
+        
+        // Data baru: baca Yield dari kolom E, F, G (index 4, 5, 6)
+        if (row[4] !== undefined && row[4] !== '') {
+          ingredients.push({
+            id: 'META_YIELD',
+            qty: row[4],
+            unit: row[5] || 'porsi',
+            type: row[6] || 'final'
+          });
+        }
+        
+        // Baca Bahan dari Kolom H dst (index 7, 8, 9, 10, 11, 12...)
+        for (let j = 7; j < row.length; j += 3) {
+          if (row[j] && String(row[j]).trim() !== '') {
+            ingredients.push({
+              id: new Date().getTime() + j, // ID sementara untuk UI React
+              itemName: row[j],
+              quantity: row[j+1],
+              unit: row[j+2] || ''
+            });
+          }
+        }
+        
+        recipes.push({
+          id: row[0],
+          menuName: row[1],
+          targetMarginPercent: Number(row[2]),
+          imageUrl: row[3] || '',
+          ingredients: ingredients
+        });
       }
-      return {
-        id: row.ID,
-        menuName: row.MenuName,
-        targetMarginPercent: Number(row.TargetMarginPercent),
-        ingredients: ingredients
-      };
-    });
+    }
 
     const response = {
       status: 'success',
@@ -189,14 +228,14 @@ function doPost(e) {
         
       // --- RECIPES ---
       case 'addRecipe':
-        result = addRowToSheet(SHEET_RECIPES, [data.id, data.menuName, data.targetMarginPercent, JSON.stringify(data.ingredients || [])]);
+        const newRow = addRecipeRowData(data);
+        ensureRecipeHeaders(ss, (newRow.length - 7) / 3);
+        result = addRowToSheet(SHEET_RECIPES, newRow);
         break;
       case 'deleteRecipe':
         result = deleteRowById(SHEET_RECIPES, data.id);
         break;
       case 'updateRecipe':
-        // Digunakan ketika menambah bahan (ingredient) baru ke resep, 
-        // merubah nama menu, atau target margin
         result = updateRecipeRow(data);
         break;
         
@@ -275,6 +314,63 @@ function deleteRowById(sheetName, id) {
   throw new Error("ID not found in " + sheetName);
 }
 
+// ==========================================
+// RECIPES DYNAMIC COLUMN HANDLERS
+// ==========================================
+
+/**
+ * Formats a single recipe object into a flat row array (expanding ingredients to columns)
+ */
+function addRecipeRowData(data) {
+  let row = [
+    data.id, 
+    data.menuName, 
+    data.targetMarginPercent, 
+    data.imageUrl || ''
+  ];
+  
+  const ings = data.ingredients || [];
+  
+  // 1. Extract META_YIELD into fixed columns E, F, G
+  const yieldMeta = ings.find(i => i.id === 'META_YIELD') || {};
+  row.push(yieldMeta.qty !== undefined ? yieldMeta.qty : 1);
+  row.push(yieldMeta.unit || 'porsi');
+  row.push(yieldMeta.type || 'final');
+  
+  // 2. Extract real ingredients dynamically into remaining columns
+  const realIngs = ings.filter(i => i.id !== 'META_YIELD');
+  for (let i = 0; i < realIngs.length; i++) {
+    row.push(realIngs[i].itemName);
+    row.push(realIngs[i].quantity !== undefined ? realIngs[i].quantity : (realIngs[i].qty || 0));
+    row.push(realIngs[i].unit || '');
+  }
+  
+  return row;
+}
+
+/**
+ * Ensures that the header row has enough columns for all dynamic ingredients.
+ */
+function ensureRecipeHeaders(ss, maxBahan) {
+  const sheet = ss.getSheetByName(SHEET_RECIPES);
+  if (!sheet) return;
+  const data = sheet.getDataRange().getValues();
+  let headers = data.length > 0 ? data[0] : ['ID', 'MenuName', 'TargetMarginPercent', 'ImageUrl', 'YieldQty', 'YieldUnit', 'YieldType'];
+  
+  const expectedLength = 7 + (maxBahan * 3);
+  if (headers.length < expectedLength) {
+    let newHeaders = ['ID', 'MenuName', 'TargetMarginPercent', 'ImageUrl', 'YieldQty', 'YieldUnit', 'YieldType'];
+    for (let i = 1; i <= Math.max(maxBahan, Math.floor((headers.length - 7) / 3)); i++) {
+      newHeaders.push(`Bahan ${i}`);
+      newHeaders.push(`Qty ${i}`);
+      newHeaders.push(`Satuan ${i}`);
+    }
+    // Update headers in spreadsheet
+    sheet.getRange(1, 1, 1, newHeaders.length).setValues([newHeaders]);
+    sheet.getRange(1, 1, 1, newHeaders.length).setFontWeight("bold");
+  }
+}
+
 /**
  * Updates an entire Recipe row based on ID.
  */
@@ -286,9 +382,19 @@ function updateRecipeRow(recipeData) {
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] == recipeData.id) {
       const rowNum = i + 1;
-      sheet.getRange(rowNum, 2).setValue(recipeData.menuName);
-      sheet.getRange(rowNum, 3).setValue(recipeData.targetMarginPercent);
-      sheet.getRange(rowNum, 4).setValue(JSON.stringify(recipeData.ingredients || []));
+      const newRowData = addRecipeRowData(recipeData);
+      
+      // Ensure we have enough header columns for this recipe
+      ensureRecipeHeaders(ss, Math.floor((newRowData.length - 7) / 3));
+      
+      // Clear old data for this specific row to prevent leftover columns if new list is shorter
+      const lastCol = sheet.getLastColumn();
+      if (lastCol > 0) {
+        sheet.getRange(rowNum, 1, 1, lastCol).clearContent();
+      }
+      
+      // Write the new row data
+      sheet.getRange(rowNum, 1, 1, newRowData.length).setValues([newRowData]);
       return { message: "Recipe updated successfully" };
     }
   }
