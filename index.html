@@ -428,6 +428,58 @@
         }).sort((a, b) => a.name.localeCompare(b.name));
       }, [purchases, recipes, sales, adjustments, uniqueItems, inventoryFilterMonth]);
 
+      const getFlatRequiredIngredients = (recipeId, multiplier = 1) => {
+        const reqMap = new Map();
+        const traverse = (recId, mult, visited = new Set()) => {
+          if (visited.has(recId)) return;
+          visited.add(recId);
+          const r = recipes.find(rec => rec.id === recId);
+          if (!r) return;
+          r.ingredients.forEach(ing => {
+            if (ing.id === 'META_YIELD') return;
+            const qty = parseNumberInput(ing.quantity) * mult;
+            if (qty <= 0) return;
+            const searchStr = String(ing.itemName || '').toLowerCase();
+            const subRecipe = recipes.find(rec => 
+              String(rec.id) === String(ing.itemName) ||
+              `[resep] ${String(rec.menuName || '').toLowerCase()}` === searchStr ||
+              String(rec.menuName || '').toLowerCase() === searchStr
+            );
+            if (subRecipe) {
+              const subYieldQty = parseNumberInput(subRecipe.yieldQty) || 1;
+              traverse(subRecipe.id, qty / subYieldQty, new Set(visited));
+            } else {
+              reqMap.set(searchStr, (reqMap.get(searchStr) || 0) + qty);
+            }
+          });
+        };
+        traverse(recipeId, multiplier);
+        return reqMap;
+      };
+
+      // Returns max yieldQty of a recipe based on inventory stock
+      const calculateMaxPortions = (recipeId) => {
+        const recipe = recipes.find(r => r.id === recipeId);
+        if (!recipe || !recipe.ingredients || recipe.ingredients.length === 0) return 0;
+
+        const reqMap = getFlatRequiredIngredients(recipe.id);
+
+        if (reqMap.size === 0) return 0;
+
+        let maxBatches = Infinity;
+        reqMap.forEach((reqQty, ingName) => {
+          const invItem = inventoryData.find(item => String(item.name).toLowerCase() === ingName);
+          const stock = invItem ? invItem.stokAkhir : 0;
+          if (reqQty > 0) {
+            maxBatches = Math.min(maxBatches, stock / reqQty);
+          }
+        });
+
+        if (maxBatches === Infinity || maxBatches < 0) return 0;
+        const yieldQty = parseNumberInput(recipe.yieldQty) || 1;
+        return Math.floor(maxBatches * yieldQty);
+      };
+
       // ==========================================
       // EXPORT HANDLERS
       // ==========================================
@@ -1546,8 +1598,11 @@
                             <span className="text-white font-bold text-sm bg-indigo-600 px-3 py-1 rounded-full"><i className="fas fa-eye mr-1"></i> Lihat Rincian</span>
                           </div>
                         </div>
-                        <div className="p-5">
-                          <h3 className="font-black text-lg text-slate-800 mb-4 line-clamp-2 leading-tight">{recipe.menuName}</h3>
+                        <div className="p-5 flex flex-col h-full">
+                          <h3 className="font-black text-lg text-slate-800 mb-2 line-clamp-2 leading-tight">{recipe.menuName}</h3>
+                          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 mb-4 w-max" title="Berdasarkan sisa stok inventori">
+                            <i className="fas fa-boxes"></i> Bisa dibuat: {calculateMaxPortions(recipe.id)} {recipe.yieldUnit}
+                          </div>
                           <div className="flex justify-between items-center pt-4 border-t border-slate-100">
                             <div>
                               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total HPP</p>
@@ -1600,8 +1655,13 @@
 
                       <div className="w-full md:w-1/2 p-6 md:p-8 flex flex-col max-h-[80vh] overflow-y-auto">
                         <h2 className="text-3xl font-black text-slate-800 mb-2">{recipe.menuName}</h2>
-                        <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full mb-6 w-max border border-emerald-200">
-                          <i className="fas fa-check-circle"></i> Siap Jual ({formatNum(recipe.yieldQty)} {recipe.yieldUnit})
+                        <div className="flex flex-wrap gap-2 mb-6">
+                          <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                            <i className="fas fa-check-circle"></i> Resep untuk {formatNum(recipe.yieldQty)} {recipe.yieldUnit}
+                          </div>
+                          <div className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200" title="Berdasarkan stok bahan baku yang tersisa di inventori saat ini">
+                            <i className="fas fa-boxes"></i> Bisa dibuat: {calculateMaxPortions(recipe.id)} {recipe.yieldUnit}
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-4 mb-6">
@@ -1627,9 +1687,9 @@
                         </div>
 
                         <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
-                          <i className="fas fa-list-ul text-indigo-500"></i> Komposisi Bahan
+                          <i className="fas fa-list-ul text-indigo-500"></i> Komposisi Resep
                         </h3>
-                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex-1">
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
                           <ul className="space-y-3">
                             {recipe.ingredients.map(ing => {
                               if (ing.id === 'META_YIELD') return null;
@@ -1644,6 +1704,48 @@
                           {recipe.ingredients.filter(i => i.id !== 'META_YIELD').length === 0 && (
                             <p className="text-center text-slate-400 italic text-sm py-4">Belum ada bahan</p>
                           )}
+                        </div>
+
+                        <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
+                          <i className="fas fa-microscope text-indigo-500"></i> Status Bahan Mentah
+                        </h3>
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex-1">
+                          {(() => {
+                            const flatIngredients = getFlatRequiredIngredients(recipe.id);
+                            if (flatIngredients.size === 0) return <p className="text-center text-slate-400 italic text-sm py-4">Belum ada data bahan baku</p>;
+
+                            return (
+                              <div className="space-y-3">
+                                {Array.from(flatIngredients.entries()).map(([ingName, reqQty], idx) => {
+                                  const invItem = inventoryData.find(item => String(item.name).toLowerCase() === ingName);
+                                  const stock = invItem ? invItem.stokAkhir : 0;
+                                  const unit = invItem ? invItem.unit : (uniqueItems.find(u => u.name.toLowerCase() === ingName)?.unit || '-');
+                                  const isLacking = stock < reqQty;
+                                  const shortage = isLacking ? reqQty - stock : 0;
+
+                                  return (
+                                    <div key={idx} className={`p-3 rounded-lg border ${isLacking ? 'bg-rose-50 border-rose-200' : 'bg-white border-slate-200'}`}>
+                                      <div className="flex justify-between items-center mb-1">
+                                        <span className="font-bold text-slate-700 capitalize">{ingName}</span>
+                                        <span className={`text-[10px] font-bold px-2 py-1 rounded ${isLacking ? 'bg-rose-500 text-white' : 'bg-emerald-100 text-emerald-700'}`}>
+                                          {isLacking ? 'Stok Kurang' : 'Stok Aman'}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between items-center text-sm">
+                                        <span className="text-slate-500">Butuh: <b>{formatNum(reqQty)} {unit}</b></span>
+                                        <span className="text-slate-500">Sisa Stok: <b>{formatNum(stock)} {unit}</b></span>
+                                      </div>
+                                      {isLacking && (
+                                        <div className="mt-2 text-[11px] font-bold text-rose-600 bg-rose-100 px-2 py-1 rounded inline-block">
+                                          <i className="fas fa-exclamation-circle mr-1"></i> Kurang {formatNum(shortage)} {unit} lagi
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>
