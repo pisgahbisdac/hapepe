@@ -65,7 +65,7 @@ function setup() {
   let salesSheet = ss.getSheetByName(SHEET_SALES);
   if (!salesSheet) {
     salesSheet = ss.insertSheet(SHEET_SALES);
-    salesSheet.appendRow(['ID', 'Date', 'RecipeID', 'QuantitySold']);
+    salesSheet.appendRow(['ID', 'Date', 'RecipeID', 'QuantitySold', 'MenuName']);
     salesSheet.getRange("A1:D1").setFontWeight("bold");
   }
 
@@ -272,7 +272,7 @@ function doPost(e) {
         
       // --- SALES ---
       case 'addSale':
-        result = addRowToSheet(SHEET_SALES, [data.id, data.date, data.recipeId, data.quantitySold]);
+        result = addRowToSheet(SHEET_SALES, [data.id, data.date, data.recipeId, data.quantitySold, data.menuName]);
         break;
       case 'deleteSale':
         result = deleteRowById(SHEET_SALES, data.id);

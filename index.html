@@ -26,6 +26,63 @@
       ]
     });
   </script>
+  <style>
+    /* Custom CSS */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background-color: #cbd5e1;
+      border-radius: 10px;
+    }
+
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      /* Hanya print area tabel Dashboard Stok (ditandai dengan .print-area) */
+      .print-area, .print-area * {
+        visibility: visible;
+      }
+      .print-area {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        box-shadow: none !important;
+        border: none !important;
+      }
+      thead th {
+        border-top: 20px solid white !important; /* Memberi jarak aman atas secara manual */
+      }
+      tr {
+        page-break-inside: avoid;
+      }
+      thead {
+        display: table-header-group;
+      }
+      .overflow-y-auto, .overflow-x-auto {
+        overflow: visible !important;
+        max-height: none !important;
+      }
+      @page {
+        size: landscape;
+        margin: 1.5cm;
+      }
+      .print-hide {
+        display: none !important;
+      }
+      /* Ensure colors print correctly */
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+  </style>
 </head>
 
 <body class="bg-slate-100 text-slate-800">
@@ -48,7 +105,9 @@
 
     const formatNumberInput = (value) => {
       if (value === undefined || value === null) return '';
-      let str = String(value).replace(/[^0-9,]/g, '');
+      // Convert period to comma to allow user typing dot as decimal
+      let str = String(value).replace(/\./g, ',');
+      str = str.replace(/[^0-9,]/g, '');
       const parts = str.split(',');
       if (parts.length > 2) str = parts[0] + ',' + parts.slice(1).join('');
       const splitStr = str.split(',');
@@ -60,10 +119,13 @@
       return parseFloat(String(value).replace(/\./g, '').replace(',', '.')) || 0;
     };
 
-    const getTwoMonthsAgo = () => {
-      const date = new Date('2026-06-24'); // Simulasi tanggal sekarang
-      date.setMonth(date.getMonth() - 2);
-      return date;
+    const getTwoMonthsRange = () => {
+      const now = new Date('2026-06-24'); // Simulasi tanggal sekarang
+      // Awal dari 2 bulan yang lalu (contoh: 1 April 2026)
+      const startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      // Awal dari bulan ini (contoh: 1 Juni 2026), untuk pembatas (< bulan ini)
+      const endDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      return { startDate, endDate };
     };
 
     function App() {
@@ -84,10 +146,14 @@
 
       const [searchBahan, setSearchBahan] = useState('');
       const [filterBulan, setFilterBulan] = useState('');
+      const [inventoryFilterMonth, setInventoryFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
       const [isRefreshing, setIsRefreshing] = useState(false);
       const [salesSimulation, setSalesSimulation] = useState({});
       const [searchKatalog, setSearchKatalog] = useState('');
       const [selectedKatalogMenu, setSelectedKatalogMenu] = useState(null);
+      const [isUploadingImage, setIsUploadingImage] = useState(false);
+      const [inventorySearch, setInventorySearch] = useState('');
+      const [selectedPriceDetailItem, setSelectedPriceDetailItem] = useState(null);
 
       const [newOverhead, setNewOverhead] = useState({ name: '', amount: '' });
       const [newPurchase, setNewPurchase] = useState({ date: '2026-06-24', itemName: '', unit: 'kg', quantity: '', totalPrice: '' });
@@ -199,17 +265,20 @@
         if (isRecipeMatch) {
           const totalHPP = calculateRecipeHPP(isRecipeMatch.id, visited);
           const yieldData = getRecipeYield(isRecipeMatch);
-          return { price: totalHPP / yieldData.qty, status: 'sub_recipe' };
+          return { price: totalHPP / yieldData.qty, status: 'sub_recipe', details: { type: 'sub_recipe', recipe: isRecipeMatch, totalHPP, yieldData } };
         }
 
-        const twoMonthsAgo = getTwoMonthsAgo();
-        const recentPurchases = purchases.filter(p => String(p.itemName || '').toLowerCase() === searchStr && new Date(p.date) >= twoMonthsAgo);
+        const { startDate, endDate } = getTwoMonthsRange();
+        const recentPurchases = purchases.filter(p => {
+          const pDate = new Date(p.date);
+          return String(p.itemName || '').toLowerCase() === searchStr && pDate >= startDate && pDate < endDate;
+        });
 
         if (recentPurchases.length > 0) {
           const tCost = recentPurchases.reduce((s, p) => s + (Number(p.totalPrice) || 0), 0);
           const tQty = recentPurchases.reduce((s, p) => s + (Number(p.quantity) || 0), 0);
           let price = tQty > 0 ? tCost / tQty : 0;
-          return { price: isNaN(price) ? 0 : price, status: 'avg_2_months' };
+          return { price: isNaN(price) ? 0 : price, status: 'avg_2_months', details: { type: 'avg_2_months', transactions: recentPurchases, totalCost: tCost, totalQty: tQty } };
         }
 
         const allPurchases = purchases.filter(p => String(p.itemName || '').toLowerCase() === searchStr).sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -217,9 +286,9 @@
           const tCost = Number(allPurchases[0].totalPrice) || 0;
           const tQty = Number(allPurchases[0].quantity) || 0;
           let price = tQty > 0 ? tCost / tQty : 0;
-          return { price: isNaN(price) ? 0 : price, status: 'latest_fallback' };
+          return { price: isNaN(price) ? 0 : price, status: 'latest_fallback', details: { type: 'latest_fallback', transactions: [allPurchases[0]], totalCost: tCost, totalQty: tQty } };
         }
-        return { price: 0, status: 'no_data' };
+        return { price: 0, status: 'no_data', details: { type: 'no_data', transactions: [], totalCost: 0, totalQty: 0 } };
       };
 
       const uniqueItems = useMemo(() => {
@@ -246,51 +315,137 @@
       // ==========================================
       const inventoryData = useMemo(() => {
         const stockMap = new Map();
+        
+        const ensureItem = (name, rawName) => {
+           if (!stockMap.has(name)) {
+             const uItem = uniqueItems.find(u => u.name.toLowerCase() === name);
+             stockMap.set(name, { 
+                name: rawName, 
+                unit: uItem ? uItem.unit : '', 
+                stokAwal: 0, 
+                masuk: 0, 
+                keluarSales: 0, 
+                keluarAdjustments: 0 
+             });
+           }
+           return stockMap.get(name);
+        };
+
+        const filterYearMonth = inventoryFilterMonth;
+
+        const getBucket = (dateStr) => {
+           if (!filterYearMonth) return 'current';
+           const d = dateStr ? dateStr.substring(0, 7) : '';
+           if (d < filterYearMonth) return 'awal';
+           if (d === filterYearMonth) return 'current';
+           return 'future';
+        };
 
         // 1. Total In from Purchases
         purchases.forEach(p => {
           const name = String(p.itemName || '').toLowerCase();
-          if (!stockMap.has(name)) {
-            stockMap.set(name, { name: p.itemName, unit: p.unit, in: 0, outSales: 0, outAdjustments: 0 });
-          }
-          stockMap.get(name).in += Number(p.quantity) || 0;
+          const bucket = getBucket(p.date);
+          if (bucket === 'future') return;
+          
+          const item = ensureItem(name, p.itemName);
+          const qty = Number(p.quantity) || 0;
+          if (bucket === 'awal') item.stokAwal += qty;
+          else item.masuk += qty;
         });
 
         // 2. Total Out from Sales
         sales.forEach(sale => {
+          const bucket = getBucket(sale.date);
+          if (bucket === 'future') return;
+
           const recipe = recipes.find(r => String(r.id) === String(sale.recipeId));
           if (recipe) {
             const qtySold = Number(sale.quantitySold) || 0;
-            // Iterate all ingredients in this recipe and deduct
-            recipe.ingredients.forEach(ing => {
-              const name = String(ing.itemName || '').toLowerCase();
-              const qtyUsed = parseNumberInput(ing.quantity) * qtySold;
+            const deductIngredients = (currentRecipe, multiplier, bucketStr, visited = new Set()) => {
+              if (!currentRecipe || visited.has(currentRecipe.id)) return;
+              visited.add(currentRecipe.id);
 
-              if (!stockMap.has(name)) {
-                const uItem = uniqueItems.find(u => u.name.toLowerCase() === name);
-                stockMap.set(name, { name: ing.itemName, unit: uItem ? uItem.unit : '', in: 0, outSales: 0, outAdjustments: 0 });
-              }
-              stockMap.get(name).outSales += qtyUsed;
-            });
+              currentRecipe.ingredients.forEach(ing => {
+                const nameStr = String(ing.itemName || '').toLowerCase();
+                const qtyUsed = parseNumberInput(ing.quantity) * multiplier;
+
+                const subRecipe = recipes.find(r => 
+                  `[resep] ${String(r.menuName || '').toLowerCase()}` === nameStr ||
+                  String(r.menuName || '').toLowerCase() === nameStr
+                );
+
+                if (subRecipe) {
+                  const yieldData = getRecipeYield(subRecipe);
+                  const subMultiplier = yieldData.qty > 0 ? (qtyUsed / yieldData.qty) : 0;
+                  deductIngredients(subRecipe, subMultiplier, bucketStr, new Set(visited));
+                } else {
+                  const item = ensureItem(nameStr, ing.itemName);
+                  if (bucketStr === 'awal') item.stokAwal -= qtyUsed;
+                  else item.keluarSales += qtyUsed;
+                }
+              });
+            };
+
+            deductIngredients(recipe, qtySold, bucket);
           }
         });
 
-        // 3. Manual Adjustments (Positive = deduction/rusak/terbuang, Negative = addition)
+        // 3. Manual Adjustments (Positive = deduction/rusak/terbuang)
         adjustments.forEach(adj => {
+          const bucket = getBucket(adj.date);
+          if (bucket === 'future') return;
+
           const name = String(adj.itemName || '').toLowerCase();
           const qtyAdj = Number(adj.quantity) || 0;
-          if (!stockMap.has(name)) {
-            const uItem = uniqueItems.find(u => u.name.toLowerCase() === name);
-            stockMap.set(name, { name: adj.itemName, unit: uItem ? uItem.unit : '', in: 0, outSales: 0, outAdjustments: 0 });
-          }
-          stockMap.get(name).outAdjustments += qtyAdj;
+          const item = ensureItem(name, adj.itemName);
+          
+          if (bucket === 'awal') item.stokAwal -= qtyAdj;
+          else item.keluarAdjustments += qtyAdj;
         });
 
-        return Array.from(stockMap.values()).map(item => ({
-          ...item,
-          remaining: item.in - item.outSales - item.outAdjustments
-        })).sort((a, b) => a.name.localeCompare(b.name));
-      }, [purchases, recipes, sales, adjustments, uniqueItems]);
+        return Array.from(stockMap.values())
+          .filter(item => item.name && item.name.trim() !== '')
+          .map(item => {
+          const priceObj = getAveragePrice(item.name);
+          return {
+            ...item,
+            price: priceObj.price,
+            priceDetails: priceObj.details,
+            stokAkhir: item.stokAwal + item.masuk - item.keluarSales - item.keluarAdjustments
+          };
+        }).sort((a, b) => a.name.localeCompare(b.name));
+      }, [purchases, recipes, sales, adjustments, uniqueItems, inventoryFilterMonth]);
+
+      // ==========================================
+      // EXPORT HANDLERS
+      // ==========================================
+      const handleExportExcel = () => {
+         const headers = ['Nama Bahan', 'Satuan', 'Harga Rata-rata', 'Stok Awal', 'Masuk (Beli)', 'Keluar (Resep)', 'Keluar (Buang)', 'Stok Akhir'];
+         const rows = inventoryData.map(item => [
+            `"${item.name}"`,
+            item.unit,
+            item.price,
+            item.stokAwal,
+            item.masuk,
+            item.keluarSales,
+            item.keluarAdjustments,
+            item.stokAkhir
+         ]);
+         
+         const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+         const url = URL.createObjectURL(blob);
+         const link = document.createElement("a");
+         link.setAttribute("href", url);
+         link.setAttribute("download", `Laporan_Inventori_${inventoryFilterMonth || 'All'}.csv`);
+         document.body.appendChild(link);
+         link.click();
+         document.body.removeChild(link);
+      };
+
+      const handleExportPDF = () => {
+         window.print();
+      };
 
       // ==========================================
       // HANDLERS (Update state lokal + kirim ke API)
@@ -323,7 +478,9 @@
         const parsedQty = parseNumberInput(newSale.quantitySold);
         if (!newSale.recipeId || parsedQty <= 0) return;
 
-        const saleData = { id: Date.now(), ...newSale, quantitySold: parsedQty };
+        const recipe = recipes.find(r => String(r.id) === String(newSale.recipeId));
+        const menuName = recipe ? recipe.menuName : '';
+        const saleData = { id: Date.now(), ...newSale, quantitySold: parsedQty, menuName };
         setSales([...sales, saleData]);
         sendApiRequest('addSale', saleData);
         setNewSale({ ...newSale, recipeId: '', quantitySold: '' });
@@ -348,6 +505,84 @@
       const handleDeleteAdjustment = (id) => {
         setAdjustments(adjustments.filter(a => a.id !== id));
         sendApiRequest('deleteAdjustment', { id });
+      };
+
+      // --- IMAGES ---
+      const compressImageToBase64 = (file, callback) => {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+          const img = new Image();
+          img.onload = function() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            let quality = 0.8;
+            let scale = 1.0;
+            const maxDimension = 600;
+            if (img.width > maxDimension || img.height > maxDimension) {
+              if (img.width > img.height) {
+                scale = maxDimension / img.width;
+              } else {
+                scale = maxDimension / img.height;
+              }
+            }
+
+            let currentWidth = img.width * scale;
+            let currentHeight = img.height * scale;
+            let base64String = "";
+            let isSafe = false;
+
+            // Google Sheets cell limit is 50,000. We target < 49,000 for safety.
+            const MAX_CHARS = 49000;
+
+            for (let attempt = 0; attempt < 10; attempt++) {
+              canvas.width = currentWidth;
+              canvas.height = currentHeight;
+              
+              ctx.fillStyle = "white"; // Fallback for transparent PNGs
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(img, 0, 0, currentWidth, currentHeight);
+              
+              base64String = canvas.toDataURL('image/jpeg', quality);
+              
+              if (base64String.length <= MAX_CHARS) {
+                isSafe = true;
+                break;
+              }
+              
+              quality -= 0.1;
+              if (quality < 0.3) quality = 0.3;
+              currentWidth *= 0.8;
+              currentHeight *= 0.8;
+            }
+
+            if (!isSafe) {
+              canvas.width = 100;
+              canvas.height = 100;
+              ctx.drawImage(img, 0, 0, 100, 100);
+              base64String = canvas.toDataURL('image/jpeg', 0.5);
+            }
+
+            callback(base64String);
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      };
+
+      const handleImageUpload = (recipeId, e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        setIsUploadingImage(true);
+        compressImageToBase64(file, (compressedBase64) => {
+          const recipe = recipes.find(r => r.id === recipeId);
+          if (recipe) {
+            const updatedRecipe = { ...recipe, imageUrl: compressedBase64 };
+            handleSaveRecipe(recipeId, updatedRecipe);
+          }
+          setIsUploadingImage(false);
+        });
       };
 
       // --- RECIPES ---
@@ -555,7 +790,7 @@
 
       return (
         <div className="min-h-screen p-4 md:p-8 font-sans pb-20">
-          <div className="max-w-6xl mx-auto space-y-6">
+          <div className="max-w-[1600px] px-4 mx-auto space-y-6">
 
             {/* Header */}
             <header className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
@@ -980,22 +1215,45 @@
                           </h4>
 
                           <div className="mb-4 bg-slate-700/50 p-4 rounded-xl border border-slate-600">
-                            <label className="text-xs font-bold text-slate-300 uppercase mb-2 block">Foto Menu (Tautan URL)</label>
-                            <input
-                              type="text"
-                              placeholder="Paste link gambar (jpg/png) di sini..."
-                              className="w-full bg-slate-800 border border-slate-600 rounded-lg p-2 text-sm text-white focus:border-emerald-500 outline-none mb-3"
-                              value={recipe.imageUrl || ''}
-                              onChange={e => {
-                                const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, imageUrl: e.target.value } : r);
-                                setRecipes(newRecipes);
-                              }}
-                              onBlur={(e) => handleSaveRecipe(recipe.id, { ...recipe, imageUrl: e.target.value })}
-                            />
+                            <label className="text-xs font-bold text-slate-300 uppercase mb-2 block">Foto Menu (Pilih dari Perangkat)</label>
+                            
+                            <div className="relative mb-3">
+                              <input 
+                                type="file" 
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(recipe.id, e)}
+                                disabled={isUploadingImage}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                              />
+                              <div className={`w-full bg-slate-800 border-2 border-dashed ${isUploadingImage ? 'border-emerald-500' : 'border-slate-500'} rounded-lg p-4 text-center transition-colors flex flex-col items-center justify-center gap-2`}>
+                                {isUploadingImage ? (
+                                  <>
+                                    <i className="fas fa-spinner fa-spin text-emerald-400 text-2xl"></i>
+                                    <span className="text-sm font-medium text-emerald-400">Sedang mengunggah...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <i className="fas fa-cloud-upload-alt text-slate-400 text-2xl group-hover:text-emerald-400"></i>
+                                    <span className="text-sm font-medium text-slate-400">Pilih gambar atau tarik ke sini</span>
+                                    <span className="text-xs text-slate-500">(Otomatis dikompres & disimpan di Spreadsheet)</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+
                             {recipe.imageUrl && (
-                              <div className="w-full h-40 rounded-lg overflow-hidden border border-slate-600 bg-slate-800 flex items-center justify-center relative group">
-                                <img src={recipe.imageUrl} alt={recipe.menuName} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }} />
+                              <div className="w-full h-40 rounded-lg overflow-hidden border border-slate-600 bg-slate-800 flex items-center justify-center relative group mt-2">
+                                <img src={recipe.imageUrl} alt={recipe.menuName} className="w-full h-full object-contain" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }} />
                                 <div className="text-slate-500 text-xs hidden font-medium">Gambar Tidak Tersedia</div>
+                                
+                                {/* Tombol hapus gambar */}
+                                <button 
+                                  onClick={() => handleSaveRecipe(recipe.id, { ...recipe, imageUrl: '' })}
+                                  className="absolute top-2 right-2 bg-red-500/80 hover:bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                  title="Hapus Gambar"
+                                >
+                                  <i className="fas fa-trash text-sm"></i>
+                                </button>
                               </div>
                             )}
                           </div>
@@ -1260,7 +1518,7 @@
                     <div className="flex flex-col md:flex-row h-full">
                       <div className="w-full md:w-2/5 h-64 md:h-auto bg-slate-100 relative">
                         {recipe.imageUrl ? (
-                          <img src={recipe.imageUrl} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                          <img src={recipe.imageUrl} className="w-full h-full object-contain bg-slate-800" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
                             <i className="fas fa-image text-5xl mb-3"></i>
@@ -1388,42 +1646,184 @@
                 </div>
 
                 {/* Tabel Dashboard Stok */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                  <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2">
-                    <i className="fas fa-boxes text-lg"></i> Dashboard Stok Saat Ini (Sisa Fisik)
-                  </h2>
-                  <div className="overflow-x-auto">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 print-area">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b pb-4">
+                    <h2 className="text-lg font-bold flex items-center gap-2">
+                      <i className="fas fa-boxes text-lg text-indigo-600"></i> Laporan Inventori
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-3 w-full md:w-auto print-hide">
+                      <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                        <i className="fas fa-search text-slate-400"></i>
+                        <input type="text" placeholder="Cari bahan..." className="p-1 border-none bg-transparent outline-none text-sm w-32 md:w-48" value={inventorySearch} onChange={e => setInventorySearch(e.target.value)} />
+                      </div>
+                      <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                        <label className="text-sm font-semibold text-slate-600">Bulan:</label>
+                        <input type="month" className="p-1 border-none bg-transparent outline-none font-bold text-slate-800" value={inventoryFilterMonth} onChange={e => setInventoryFilterMonth(e.target.value)} />
+                      </div>
+                      <button onClick={handleExportExcel} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
+                        <i className="fas fa-file-excel"></i> Excel
+                      </button>
+                      <button onClick={handleExportPDF} className="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
+                        <i className="fas fa-file-pdf"></i> Cetak PDF
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="overflow-x-auto overflow-y-auto max-h-[600px] rounded-lg border border-slate-200 shadow-inner">
                     <table className="w-full text-sm whitespace-nowrap">
-                      <thead className="bg-slate-50 text-slate-500">
+                      <thead className="bg-slate-800 text-slate-200 sticky top-0 z-10 shadow-md">
                         <tr>
                           <th className="p-3 text-left rounded-l-lg">Nama Bahan</th>
                           <th className="p-3 text-center">Satuan</th>
-                          <th className="p-3 text-right bg-blue-50/50">Total Beli (In)</th>
-                          <th className="p-3 text-right bg-emerald-50/50">Terjual (Out)</th>
-                          <th className="p-3 text-right bg-orange-50/50">Dibuang (Out)</th>
-                          <th className="p-3 text-right rounded-r-lg bg-slate-100 font-black">Sisa Stok Fisik</th>
+                          <th className="p-3 text-center text-emerald-300">Harga (Rata-rata)</th>
+                          <th className="p-3 text-center bg-slate-700">Stok Awal</th>
+                          <th className="p-3 text-center text-blue-300">Masuk (Beli)</th>
+                          <th className="p-3 text-center text-emerald-300">Keluar (Resep)</th>
+                          <th className="p-3 text-center text-orange-300">Keluar (Buang)</th>
+                          <th className="p-3 text-center rounded-r-lg bg-indigo-900 font-black text-white">Stok Akhir</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {inventoryData.map((item, idx) => (
+                        {inventoryData.filter(item => item.name.toLowerCase().includes(inventorySearch.toLowerCase())).map((item, idx) => (
                           <tr key={idx} className="hover:bg-slate-50 transition-colors">
                             <td className="p-3 font-semibold text-slate-800">{item.name}</td>
-                            <td className="p-3 text-center text-slate-500 uppercase font-bold text-xs">{item.unit}</td>
-                            <td className="p-3 text-right text-blue-600 font-medium">{formatNum(item.in)}</td>
-                            <td className="p-3 text-right text-emerald-600 font-medium">{formatNum(item.outSales)}</td>
-                            <td className="p-3 text-right text-orange-600 font-medium">{formatNum(item.outAdjustments)}</td>
-                            <td className={`p-3 text-right font-black ${item.remaining < 0 ? 'text-red-500 bg-red-50' : 'text-slate-800 bg-slate-50'}`}>{formatNum(item.remaining)}</td>
+                            <td className="p-3 text-center text-slate-500 uppercase font-bold text-[10px] bg-slate-50">{item.unit}</td>
+                            <td 
+                              className="p-3 text-center text-emerald-600 font-medium cursor-pointer hover:underline hover:text-emerald-800 transition-colors"
+                              onClick={() => setSelectedPriceDetailItem(item)}
+                              title="Klik untuk melihat detail perhitungan"
+                            >
+                              Rp {formatNum(item.price)}
+                              <i className="fas fa-info-circle ml-2 text-emerald-400 text-[10px]"></i>
+                            </td>
+                            <td className="p-3 text-center text-slate-600 font-medium">{formatNum(item.stokAwal)}</td>
+                            <td className="p-3 text-center text-blue-600 font-medium">{formatNum(item.masuk)}</td>
+                            <td className="p-3 text-center text-emerald-600 font-medium">{formatNum(item.keluarSales)}</td>
+                            <td className="p-3 text-center text-orange-600 font-medium">{formatNum(item.keluarAdjustments)}</td>
+                            <td className={`p-3 text-center font-black ${item.stokAkhir < 0 ? 'text-red-500 bg-red-50' : 'text-slate-800 bg-indigo-50/30'}`}>{formatNum(item.stokAkhir)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                     {inventoryData.length === 0 && <p className="text-center text-slate-400 p-8">Belum ada data stok yang bisa dihitung.</p>}
+                    {inventoryData.length > 0 && inventoryData.filter(item => item.name.toLowerCase().includes(inventorySearch.toLowerCase())).length === 0 && (
+                      <p className="text-center text-slate-400 p-8">Pencarian "{inventorySearch}" tidak ditemukan.</p>
+                    )}
                   </div>
                 </div>
 
               </div>
             )}
           </div>
+
+          {/* Modal Rincian Harga Rata-rata */}
+          {selectedPriceDetailItem && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4 z-50 print-hide animate-fade-in">
+              <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden animate-slide-up relative flex flex-col max-h-[90vh]">
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                  <div>
+                    <h3 className="text-xl font-bold text-slate-800">Detail Harga Bahan</h3>
+                    <p className="text-sm text-slate-500 mt-1">{selectedPriceDetailItem.name}</p>
+                  </div>
+                  <button onClick={() => setSelectedPriceDetailItem(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 transition-colors">
+                    <i className="fas fa-times"></i>
+                  </button>
+                </div>
+                
+                <div className="p-6 overflow-y-auto">
+                  {selectedPriceDetailItem.priceDetails.type === 'sub_recipe' && (
+                    <div className="space-y-4">
+                      <div className="bg-emerald-50 text-emerald-800 p-4 rounded-xl text-sm border border-emerald-100">
+                        <i className="fas fa-info-circle mr-2"></i> Bahan ini adalah <strong>Bahan Jadi (Resep)</strong>. Harganya dihitung berdasarkan Harga Pokok Penjualan (HPP) resep tersebut.
+                      </div>
+                      <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-200">
+                        <span className="font-semibold">Total HPP Resep</span>
+                        <span className="font-bold">Rp {formatNum(selectedPriceDetailItem.priceDetails.totalHPP)}</span>
+                      </div>
+                      <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-200">
+                        <span className="font-semibold">Yield (Hasil Resep)</span>
+                        <span className="font-bold">{formatNum(selectedPriceDetailItem.priceDetails.yieldData.qty)} {selectedPriceDetailItem.priceDetails.yieldData.unit}</span>
+                      </div>
+                      <div className="p-4 bg-emerald-600 text-white rounded-xl shadow-inner text-center">
+                        <p className="text-sm opacity-90 mb-1">Harga Per Satuan ({selectedPriceDetailItem.unit})</p>
+                        <p className="text-2xl font-black">Rp {formatNum(selectedPriceDetailItem.price)}</p>
+                        <p className="text-xs opacity-80 mt-2">Rumus: Total HPP ÷ Hasil Resep</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedPriceDetailItem.priceDetails.type === 'avg_2_months' && (
+                    <div className="space-y-4">
+                      <div className="bg-blue-50 text-blue-800 p-4 rounded-xl text-sm border border-blue-100">
+                        <i className="fas fa-info-circle mr-2"></i> Harga dihitung dari <strong>Rata-rata Pembelian 2 Bulan Penuh Sebelumnya</strong> (tidak termasuk bulan berjalan).
+                      </div>
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-100 text-slate-700">
+                            <tr>
+                              <th className="p-3 text-left">Tanggal</th>
+                              <th className="p-3 text-right">Kuantitas</th>
+                              <th className="p-3 text-right">Total Biaya</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {selectedPriceDetailItem.priceDetails.transactions.map((trx, i) => (
+                              <tr key={i} className="hover:bg-slate-50">
+                                <td className="p-3">{new Date(trx.date).toLocaleDateString('id-ID')}</td>
+                                <td className="p-3 text-right font-medium">{formatNum(trx.quantity)} {selectedPriceDetailItem.unit}</td>
+                                <td className="p-3 text-right font-medium">Rp {formatNum(trx.totalPrice)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot className="bg-slate-50 font-bold border-t-2 border-slate-200">
+                            <tr>
+                              <td className="p-3 text-right">TOTAL</td>
+                              <td className="p-3 text-right text-indigo-600">{formatNum(selectedPriceDetailItem.priceDetails.totalQty)} {selectedPriceDetailItem.unit}</td>
+                              <td className="p-3 text-right text-indigo-600">Rp {formatNum(selectedPriceDetailItem.priceDetails.totalCost)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                      <div className="p-4 bg-blue-600 text-white rounded-xl shadow-inner text-center">
+                        <p className="text-sm opacity-90 mb-1">Harga Rata-rata per Satuan</p>
+                        <p className="text-2xl font-black">Rp {formatNum(selectedPriceDetailItem.price)}</p>
+                        <p className="text-xs opacity-80 mt-2">Rumus: Total Biaya ÷ Total Kuantitas</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedPriceDetailItem.priceDetails.type === 'latest_fallback' && (
+                    <div className="space-y-4">
+                      <div className="bg-orange-50 text-orange-800 p-4 rounded-xl text-sm border border-orange-100">
+                        <i className="fas fa-exclamation-triangle mr-2"></i> Tidak ada pembelian dalam 2 bulan terakhir. Harga menggunakan <strong>Riwayat Pembelian Terakhir</strong>.
+                      </div>
+                      <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-200">
+                        <span className="font-semibold text-slate-600">Tanggal Transaksi</span>
+                        <span className="font-bold">{new Date(selectedPriceDetailItem.priceDetails.transactions[0].date).toLocaleDateString('id-ID')}</span>
+                      </div>
+                      <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-200">
+                        <span className="font-semibold text-slate-600">Kuantitas & Biaya</span>
+                        <span className="font-bold">{formatNum(selectedPriceDetailItem.priceDetails.totalQty)} {selectedPriceDetailItem.unit} = Rp {formatNum(selectedPriceDetailItem.priceDetails.totalCost)}</span>
+                      </div>
+                      <div className="p-4 bg-orange-500 text-white rounded-xl shadow-inner text-center">
+                        <p className="text-sm opacity-90 mb-1">Harga Historis per Satuan</p>
+                        <p className="text-2xl font-black">Rp {formatNum(selectedPriceDetailItem.price)}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedPriceDetailItem.priceDetails.type === 'no_data' && (
+                    <div className="text-center p-8">
+                      <div className="text-slate-300 mb-4"><i className="fas fa-box-open text-6xl"></i></div>
+                      <h4 className="text-lg font-bold text-slate-700">Belum Ada Data Pembelian</h4>
+                      <p className="text-sm text-slate-500 mt-2">Silakan catat pembelian untuk bahan ini terlebih dahulu di Tab "Input Belanja".</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       );
     }
