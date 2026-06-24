@@ -1,360 +1,557 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  Calculator, ShoppingCart, Plus, Trash2, ChefHat, 
-  TrendingUp, AlertCircle, Settings, DollarSign, Target 
-} from 'lucide-react';
+<!DOCTYPE html>
+<html lang="id">
 
-const formatRp = (value) => {
-  return new Intl.NumberFormat('id-ID', {
-    style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0
-  }).format(value);
-};
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FoodCost Pro</title>
 
-const getTwoMonthsAgo = () => {
-  const date = new Date('2026-06-24'); // Simulate current date for testing
-  date.setMonth(date.getMonth() - 2);
-  return date;
-};
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
 
-// --- Initial Data ---
-const initialPurchases = [
-  { id: 1, date: '2026-05-10', itemName: 'Daging Ayam', unit: 'kg', quantity: 10, totalPrice: 350000 },
-  { id: 2, date: '2026-06-15', itemName: 'Daging Ayam', unit: 'kg', quantity: 5, totalPrice: 185000 },
-  { id: 3, date: '2026-06-01', itemName: 'Beras Premium', unit: 'kg', quantity: 20, totalPrice: 300000 },
-  { id: 4, date: '2026-06-20', itemName: 'Minyak Goreng', unit: 'liter', quantity: 10, totalPrice: 150000 },
-  { id: 5, date: '2026-03-01', itemName: 'Gula Pasir', unit: 'kg', quantity: 5, totalPrice: 80000 }
-];
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-const initialRecipes = [
-  {
-    id: 1,
-    menuName: 'Ayam Goreng Spesial',
-    targetMarginPercent: 40, // Margin Profit 40%
-    ingredients: [
-      { id: 101, itemName: 'Daging Ayam', quantity: 0.25 },
-      { id: 102, itemName: 'Minyak Goreng', quantity: 0.1 }
-    ]
-  }
-];
+  <!-- React & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState('recipes');
-  
-  // State
-  const [purchases, setPurchases] = useState(initialPurchases);
-  const [recipes, setRecipes] = useState(initialRecipes);
-  
-  // Overhead Costs State (Biaya Operasional Bulanan)
-  const [overheadCosts, setOverheadCosts] = useState([
-    { id: 1, name: 'Gaji Karyawan', amount: 5000000 },
-    { id: 2, name: 'Listrik', amount: 800000 },
-    { id: 3, name: 'Air PAM', amount: 300000 },
-    { id: 4, name: 'Gas LPG', amount: 450000 }
-  ]);
-  const [newOverhead, setNewOverhead] = useState({ name: '', amount: '' });
+  <!-- Babel untuk kompilasi JSX di browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  // Forms
-  const [newPurchase, setNewPurchase] = useState({ date: '2026-06-24', itemName: '', unit: 'kg', quantity: '', totalPrice: '' });
-  const [newMenuName, setNewMenuName] = useState('');
-  const [selectedRecipeId, setSelectedRecipeId] = useState(null);
-  const [newIngredient, setNewIngredient] = useState({ itemName: '', quantity: '' });
+  <script>
+    Babel.registerPreset('react-classic', {
+      presets: [
+        [Babel.availablePresets.react, { runtime: 'classic' }]
+      ]
+    });
+  </script>
+</head>
 
-  // --- Logic ---
-  const totalOverheadMonthly = overheadCosts.reduce((sum, cost) => sum + cost.amount, 0);
+<body class="bg-slate-100 text-slate-800">
 
-  const getAveragePrice = (itemName) => {
-    const twoMonthsAgo = getTwoMonthsAgo();
-    const recentPurchases = purchases.filter(p => p.itemName.toLowerCase() === itemName.toLowerCase() && new Date(p.date) >= twoMonthsAgo);
+  <div id="root"></div>
 
-    if (recentPurchases.length > 0) {
-      const tCost = recentPurchases.reduce((s, p) => s + Number(p.totalPrice), 0);
-      const tQty = recentPurchases.reduce((s, p) => s + Number(p.quantity), 0);
-      return { price: tCost / tQty, status: 'avg_2_months' };
-    }
+  <script type="text/babel" data-presets="react-classic">
+    const { useState, useMemo, useEffect } = React;
 
-    const allPurchases = purchases.filter(p => p.itemName.toLowerCase() === itemName.toLowerCase()).sort((a, b) => new Date(b.date) - new Date(a.date));
-    if (allPurchases.length > 0) return { price: Number(allPurchases[0].totalPrice) / Number(allPurchases[0].quantity), status: 'latest_fallback' };
-    return { price: 0, status: 'no_data' };
-  };
+    // --- URL GOOGLE APPS SCRIPT ANDA ---
+    const API_URL = 'https://script.google.com/macros/s/AKfycbwLLywyEdvDZhKajLmbpN8ZeFTeYkB5DRc3umPpdquRMekRnqc9ZSb2YBNguumBfXvb/exec';
 
-  const uniqueItems = useMemo(() => {
-    const items = new Map();
-    purchases.forEach(p => { if (!items.has(p.itemName.toLowerCase())) items.set(p.itemName.toLowerCase(), { name: p.itemName, unit: p.unit }); });
-    return Array.from(items.values());
-  }, [purchases]);
+    const formatRp = (value) => {
+      return new Intl.NumberFormat('id-ID', {
+        style: 'currency', currency: 'IDR', minimumFractionDigits: 0, maximumFractionDigits: 0
+      }).format(value);
+    };
 
-  // --- Handlers ---
-  const handleAddPurchase = (e) => {
-    e.preventDefault();
-    if (!newPurchase.itemName || !newPurchase.quantity || !newPurchase.totalPrice) return;
-    setPurchases([...purchases, { ...newPurchase, id: Date.now(), quantity: Number(newPurchase.quantity), totalPrice: Number(newPurchase.totalPrice) }]);
-    setNewPurchase({ ...newPurchase, itemName: '', quantity: '', totalPrice: '' });
-  };
+    const getTwoMonthsAgo = () => {
+      const date = new Date('2026-06-24'); // Simulasi tanggal sekarang
+      date.setMonth(date.getMonth() - 2);
+      return date;
+    };
 
-  const handleAddMenu = (e) => {
-    e.preventDefault();
-    if (!newMenuName) return;
-    setRecipes([...recipes, { id: Date.now(), menuName: newMenuName, targetMarginPercent: 30, ingredients: [] }]);
-    setNewMenuName('');
-  };
+    function App() {
+      const [activeTab, setActiveTab] = useState('recipes');
+      const [isLoading, setIsLoading] = useState(true);
 
-  const handleAddIngredient = (recipeId, e) => {
-    e.preventDefault();
-    if (!newIngredient.itemName || !newIngredient.quantity) return;
-    setRecipes(recipes.map(r => r.id === recipeId ? { ...r, ingredients: [...r.ingredients, { id: Date.now(), itemName: newIngredient.itemName, quantity: Number(newIngredient.quantity) }] } : r));
-    setNewIngredient({ itemName: '', quantity: '' });
-    setSelectedRecipeId(null);
-  };
+      // State (awalnya kosong, diisi dari Spreadsheet)
+      const [purchases, setPurchases] = useState([]);
+      const [recipes, setRecipes] = useState([]);
+      const [overheadCosts, setOverheadCosts] = useState([]);
 
-  const handleAddOverhead = (e) => {
-    e.preventDefault();
-    if (!newOverhead.name || !newOverhead.amount) return;
-    setOverheadCosts([...overheadCosts, { id: Date.now(), name: newOverhead.name, amount: Number(newOverhead.amount) }]);
-    setNewOverhead({ name: '', amount: '' });
-  };
+      const [newOverhead, setNewOverhead] = useState({ name: '', amount: '' });
+      const [newPurchase, setNewPurchase] = useState({ date: '2026-06-24', itemName: '', unit: 'kg', quantity: '', totalPrice: '' });
+      const [newMenuName, setNewMenuName] = useState('');
+      const [selectedRecipeId, setSelectedRecipeId] = useState(null);
+      const [newIngredient, setNewIngredient] = useState({ itemName: '', quantity: '' });
 
-  return (
-    <div className="min-h-screen bg-slate-100 text-slate-800 p-4 md:p-8 font-sans pb-20">
-      <div className="max-w-6xl mx-auto space-y-6">
-        
-        {/* Header */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <div className="bg-emerald-100 p-4 rounded-xl text-emerald-600">
-              <DollarSign size={32} />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-slate-900 tracking-tight">FoodCost Pro</h1>
-              <p className="text-slate-500 font-medium text-sm">Sistem HPP, Overhead, & Margin Resep</p>
+      // ==========================================
+      // INTEGRASI KE GOOGLE APPS SCRIPT
+      // ==========================================
+
+      // 1. Memuat data saat aplikasi pertama kali dijalankan
+      useEffect(() => {
+        fetch(API_URL)
+          .then(res => res.json())
+          .then(res => {
+            if (res.status === 'success') {
+              setPurchases(res.data.purchases || []);
+              setOverheadCosts(res.data.overheadCosts || []);
+              setRecipes(res.data.recipes || []);
+            }
+          })
+          .catch(err => console.error("Error loading data", err))
+          .finally(() => setIsLoading(false));
+      }, []);
+
+      // 2. Helper untuk mengirim data mutasi ke server (POST)
+      const sendApiRequest = async (action, data) => {
+        try {
+          const response = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action, data }),
+          });
+          const result = await response.json();
+          if (result.status !== 'success') {
+            console.error('API Error:', result.message);
+          }
+        } catch (err) {
+          console.error('Request failed:', err);
+        }
+      };
+
+      // ==========================================
+      // LOGIC KALKULASI 
+      // ==========================================
+      const totalOverheadMonthly = overheadCosts.reduce((sum, cost) => sum + cost.amount, 0);
+
+      const getAveragePrice = (itemName) => {
+        const twoMonthsAgo = getTwoMonthsAgo();
+        const recentPurchases = purchases.filter(p => p.itemName.toLowerCase() === itemName.toLowerCase() && new Date(p.date) >= twoMonthsAgo);
+
+        if (recentPurchases.length > 0) {
+          const tCost = recentPurchases.reduce((s, p) => s + Number(p.totalPrice), 0);
+          const tQty = recentPurchases.reduce((s, p) => s + Number(p.quantity), 0);
+          return { price: tCost / tQty, status: 'avg_2_months' };
+        }
+
+        const allPurchases = purchases.filter(p => p.itemName.toLowerCase() === itemName.toLowerCase()).sort((a, b) => new Date(b.date) - new Date(a.date));
+        if (allPurchases.length > 0) return { price: Number(allPurchases[0].totalPrice) / Number(allPurchases[0].quantity), status: 'latest_fallback' };
+        return { price: 0, status: 'no_data' };
+      };
+
+      const uniqueItems = useMemo(() => {
+        const items = new Map();
+        purchases.forEach(p => { if (!items.has(p.itemName.toLowerCase())) items.set(p.itemName.toLowerCase(), { name: p.itemName, unit: p.unit }); });
+        return Array.from(items.values());
+      }, [purchases]);
+
+      // ==========================================
+      // HANDLERS (Update state lokal + kirim ke API)
+      // ==========================================
+
+      // --- PURCHASES ---
+      const handleAddPurchase = (e) => {
+        e.preventDefault();
+        if (!newPurchase.itemName || !newPurchase.quantity || !newPurchase.totalPrice) return;
+        const purchaseData = { ...newPurchase, id: Date.now(), quantity: Number(newPurchase.quantity), totalPrice: Number(newPurchase.totalPrice) };
+        setPurchases([...purchases, purchaseData]);
+        sendApiRequest('addPurchase', purchaseData);
+        setNewPurchase({ ...newPurchase, itemName: '', quantity: '', totalPrice: '' });
+      };
+
+      const handleDeletePurchase = (id) => {
+        setPurchases(purchases.filter(i => i.id !== id));
+        sendApiRequest('deletePurchase', { id });
+      };
+
+      // --- RECIPES ---
+      const handleAddMenu = (e) => {
+        e.preventDefault();
+        if (!newMenuName) return;
+        const recipeData = { id: Date.now(), menuName: newMenuName, targetMarginPercent: 30, ingredients: [] };
+        setRecipes([...recipes, recipeData]);
+        sendApiRequest('addRecipe', recipeData);
+        setNewMenuName('');
+      };
+
+      const handleDeleteRecipe = (id) => {
+        setRecipes(recipes.filter(r => r.id !== id));
+        sendApiRequest('deleteRecipe', { id });
+      };
+
+      const handleAddIngredient = (recipeId, e) => {
+        e.preventDefault();
+        if (!newIngredient.itemName || !newIngredient.quantity) return;
+
+        let updatedRecipe = null;
+        const newRecipes = recipes.map(r => {
+          if (r.id === recipeId) {
+            updatedRecipe = { ...r, ingredients: [...r.ingredients, { id: Date.now(), itemName: newIngredient.itemName, quantity: Number(newIngredient.quantity) }] };
+            return updatedRecipe;
+          }
+          return r;
+        });
+
+        setRecipes(newRecipes);
+        if (updatedRecipe) sendApiRequest('updateRecipe', updatedRecipe);
+
+        setNewIngredient({ itemName: '', quantity: '' });
+        setSelectedRecipeId(null);
+      };
+
+      const handleDeleteIngredient = (recipeId, ingId) => {
+        let updatedRecipe = null;
+        const newRecipes = recipes.map(r => {
+          if (r.id === recipeId) {
+            updatedRecipe = { ...r, ingredients: r.ingredients.filter(i => i.id !== ingId) };
+            return updatedRecipe;
+          }
+          return r;
+        });
+        setRecipes(newRecipes);
+        if (updatedRecipe) sendApiRequest('updateRecipe', updatedRecipe);
+      };
+
+      const handleUpdateMargin = (recipeId, newMargin) => {
+        let updatedRecipe = null;
+        const newRecipes = recipes.map(r => {
+          if (r.id === recipeId) {
+            updatedRecipe = { ...r, targetMarginPercent: Number(newMargin) };
+            return updatedRecipe;
+          }
+          return r;
+        });
+        setRecipes(newRecipes);
+        if (updatedRecipe) sendApiRequest('updateRecipe', updatedRecipe);
+      };
+
+      // --- OVERHEAD ---
+      const handleAddOverhead = (e) => {
+        e.preventDefault();
+        if (!newOverhead.name || !newOverhead.amount) return;
+        const overheadData = { id: Date.now(), name: newOverhead.name, amount: Number(newOverhead.amount) };
+        setOverheadCosts([...overheadCosts, overheadData]);
+        sendApiRequest('addOverhead', overheadData);
+        setNewOverhead({ name: '', amount: '' });
+      };
+
+      const handleDeleteOverhead = (id) => {
+        setOverheadCosts(overheadCosts.filter(c => c.id !== id));
+        sendApiRequest('deleteOverhead', { id });
+      };
+
+      // Tampilan Loading Indicator
+      if (isLoading) {
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-slate-100">
+            <div className="text-center bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+              <i className="fas fa-spinner fa-spin text-5xl text-emerald-600 mb-4 block"></i>
+              <p className="text-slate-600 font-bold text-lg">Menyinkronkan Database...</p>
+              <p className="text-slate-400 text-sm mt-2">Menarik data dari Google Spreadsheet</p>
             </div>
           </div>
-        </div>
+        );
+      }
 
-        {/* Tab Navigation */}
-        <div className="flex space-x-2 bg-white p-2 rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
-          <button onClick={() => setActiveTab('purchases')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all ${activeTab === 'purchases' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <ShoppingCart size={18} /> 1. Data Bahan Baku
-          </button>
-          <button onClick={() => setActiveTab('overhead')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all ${activeTab === 'overhead' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <Settings size={18} /> 2. Biaya Operasional
-          </button>
-          <button onClick={() => setActiveTab('recipes')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all ${activeTab === 'recipes' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-            <ChefHat size={18} /> 3. Costing & Harga Jual
-          </button>
-        </div>
+      return (
+        <div className="min-h-screen p-4 md:p-8 font-sans pb-20">
+          <div className="max-w-6xl mx-auto space-y-6">
 
-        {/* TAB 1: PEMBELIAN */}
-        {activeTab === 'purchases' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-             <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit">
-              <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2"><Plus size={20}/> Catat Pembelian</h2>
-              <form onSubmit={handleAddPurchase} className="space-y-4">
-                {/* Form fields sama seperti sebelumnya, dipersingkat agar fokus pada fitur baru */}
-                <div><label className="text-sm font-semibold">Tanggal</label><input type="date" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" value={newPurchase.date} onChange={e => setNewPurchase({...newPurchase, date: e.target.value})} required /></div>
-                <div><label className="text-sm font-semibold">Nama Bahan</label><input type="text" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" value={newPurchase.itemName} onChange={e => setNewPurchase({...newPurchase, itemName: e.target.value})} required /></div>
-                <div className="flex gap-2">
-                  <div className="flex-1"><label className="text-sm font-semibold">Kuantitas</label><input type="number" step="0.01" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" value={newPurchase.quantity} onChange={e => setNewPurchase({...newPurchase, quantity: e.target.value})} required /></div>
-                  <div className="w-24"><label className="text-sm font-semibold">Satuan</label><select className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" value={newPurchase.unit} onChange={e => setNewPurchase({...newPurchase, unit: e.target.value})}><option value="kg">kg</option><option value="liter">liter</option><option value="pcs">pcs</option></select></div>
-                </div>
-                <div><label className="text-sm font-semibold">Total Bayar (Rp)</label><input type="number" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" value={newPurchase.totalPrice} onChange={e => setNewPurchase({...newPurchase, totalPrice: e.target.value})} required /></div>
-                <button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 text-white p-3 rounded-lg font-bold">Simpan</button>
-              </form>
-            </div>
-            <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-               <h2 className="text-lg font-bold mb-4 border-b pb-2">Riwayat Belanja Bahan</h2>
-               <div className="overflow-x-auto">
-                 <table className="w-full text-sm">
-                    <thead><tr className="bg-slate-50 text-slate-500"><th className="p-3 text-left rounded-l-lg">Tanggal</th><th className="p-3 text-left">Bahan</th><th className="p-3 text-left">Qty</th><th className="p-3 text-right">Total</th><th className="p-3 text-right">Harga/Satuan</th><th className="p-3 rounded-r-lg"></th></tr></thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {purchases.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(p=>(
-                        <tr key={p.id}><td className="p-3">{p.date}</td><td className="p-3 font-semibold">{p.itemName}</td><td className="p-3">{p.quantity} {p.unit}</td><td className="p-3 text-right">{formatRp(p.totalPrice)}</td><td className="p-3 text-right text-emerald-600 font-medium">{formatRp(p.totalPrice/p.quantity)}</td><td className="p-3 text-center"><button onClick={() => setPurchases(purchases.filter(i=>i.id!==p.id))} className="text-red-400 hover:bg-red-50 p-2 rounded"><Trash2 size={16}/></button></td></tr>
-                      ))}
-                    </tbody>
-                 </table>
-               </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 2: OVERHEAD (BIAYA OPERASIONAL) */}
-        {activeTab === 'overhead' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-              <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2"><Settings size={20}/> Input Biaya Tetap per Bulan</h2>
-              <p className="text-sm text-slate-500 mb-6">Biaya ini akan digunakan untuk menghitung Target Penjualan (Break Even Point).</p>
-              
-              <form onSubmit={handleAddOverhead} className="space-y-4 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                <div>
-                  <label className="text-sm font-semibold">Nama Biaya</label>
-                  <input type="text" placeholder="Contoh: Gaji Pegawai 2 orang" className="w-full p-2.5 mt-1 border border-slate-200 rounded-lg outline-none" value={newOverhead.name} onChange={e => setNewOverhead({...newOverhead, name: e.target.value})} required />
+            {/* Header */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
+              <div className="flex items-center gap-4">
+                <div className="bg-emerald-100 p-4 rounded-xl text-emerald-600">
+                  <i className="fas fa-database text-3xl px-2"></i>
                 </div>
                 <div>
-                  <label className="text-sm font-semibold">Nominal per Bulan (Rp)</label>
-                  <input type="number" className="w-full p-2.5 mt-1 border border-slate-200 rounded-lg outline-none" value={newOverhead.amount} onChange={e => setNewOverhead({...newOverhead, amount: e.target.value})} required />
+                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">FoodCost Pro</h1>
+                  <p className="text-emerald-600 font-bold text-sm"><i className="fas fa-cloud-check"></i> Connected to Google Sheets</p>
                 </div>
-                <button type="submit" className="w-full bg-slate-800 text-white p-2.5 rounded-lg font-bold flex justify-center gap-2"><Plus size={20}/> Tambah Biaya</button>
-              </form>
+              </div>
+            </div>
 
-              <div className="space-y-2">
-                {overheadCosts.map(cost => (
-                  <div key={cost.id} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg hover:bg-slate-50">
-                    <span className="font-medium text-slate-700">{cost.name}</span>
-                    <div className="flex items-center gap-4">
-                      <span className="font-bold text-slate-900">{formatRp(cost.amount)}</span>
-                      <button onClick={() => setOverheadCosts(overheadCosts.filter(c => c.id !== cost.id))} className="text-red-400"><Trash2 size={16}/></button>
+            {/* Tab Navigation */}
+            <div className="flex space-x-2 bg-white p-2 rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
+              <button onClick={() => setActiveTab('purchases')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'purchases' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+                <i className="fas fa-shopping-cart"></i> 1. Data Bahan Baku
+              </button>
+              <button onClick={() => setActiveTab('overhead')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'overhead' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+                <i className="fas fa-cog"></i> 2. Biaya Operasional
+              </button>
+              <button onClick={() => setActiveTab('recipes')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'recipes' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+                <i className="fas fa-utensils"></i> 3. Costing & Harga Jual
+              </button>
+            </div>
+
+            {/* TAB 1: PEMBELIAN */}
+            {activeTab === 'purchases' && (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit">
+                  <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2">
+                    <i className="fas fa-plus text-lg"></i> Catat Pembelian
+                  </h2>
+                  <form onSubmit={handleAddPurchase} className="space-y-4">
+                    <div><label className="text-sm font-semibold">Tanggal</label><input type="date" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" value={newPurchase.date} onChange={e => setNewPurchase({ ...newPurchase, date: e.target.value })} required /></div>
+                    <div>
+                      <label className="text-sm font-semibold">Nama Bahan</label>
+                      <input
+                        type="text"
+                        list="existing-items"
+                        placeholder="Ketik untuk mencari atau menambah baru..."
+                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500"
+                        value={newPurchase.itemName}
+                        onChange={e => {
+                          const val = e.target.value;
+                          const existing = uniqueItems.find(u => u.name.toLowerCase() === val.toLowerCase());
+                          if (existing) {
+                            setNewPurchase({ ...newPurchase, itemName: existing.name, unit: existing.unit });
+                          } else {
+                            setNewPurchase({ ...newPurchase, itemName: val });
+                          }
+                        }}
+                        required
+                      />
+                      <datalist id="existing-items">
+                        {uniqueItems.map((item, idx) => (
+                          <option key={idx} value={item.name} />
+                        ))}
+                      </datalist>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-800 text-white p-8 rounded-2xl shadow-md h-fit relative overflow-hidden">
-              <div className="absolute -right-10 -top-10 opacity-10"><Calculator size={200}/></div>
-              <h3 className="text-slate-300 font-semibold mb-2">Total Biaya Operasional / Bulan</h3>
-              <div className="text-4xl font-black text-emerald-400 mb-4">{formatRp(totalOverheadMonthly)}</div>
-              <p className="text-slate-300 text-sm leading-relaxed">
-                Ini adalah total biaya (karyawan, sewa, listrik, dll) yang harus Anda keluarkan setiap bulannya, <strong>terlepas dari laku atau tidaknya makanan Anda.</strong>
-              </p>
-              <div className="mt-6 p-4 bg-slate-700/50 rounded-xl border border-slate-600">
-                <p className="text-sm text-amber-200 flex items-start gap-2">
-                  <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                  Keuntungan Kotor (Harga Jual - Modal Bahan) dari setiap porsi yang terjual akan digunakan untuk menutupi biaya operasional ini.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: COSTING, MARGIN & BREAK EVEN POINT */}
-        {activeTab === 'recipes' && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            
-            {/* Buat Menu Baru */}
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex gap-4">
-              <input type="text" placeholder="Nama Menu Baru (cth: Ayam Goreng Geprek)" className="flex-1 p-3 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 font-medium" value={newMenuName} onChange={e => setNewMenuName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddMenu(e)} />
-              <button onClick={handleAddMenu} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 rounded-xl font-bold flex items-center gap-2"><Plus size={20} /> Buat Menu</button>
-            </div>
-
-            {/* List Menu */}
-            {recipes.map(recipe => {
-              // 1. Kalkulasi HPP Bahan Baku
-              const hppBahan = recipe.ingredients.reduce((total, ing) => total + (getAveragePrice(ing.itemName).price * ing.quantity), 0);
-              
-              // 2. Kalkulasi Harga Jual Ideal berdasarkan Margin Profit
-              const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
-              
-              // 3. Profit Kotor per Porsi
-              const profitPerPorsi = hargaJualIdeal - hppBahan;
-
-              // 4. Target Penjualan Balik Modal (BEP) = Total Overhead / Profit per Porsi
-              const bepPorsi = profitPerPorsi > 0 ? Math.ceil(totalOverheadMonthly / profitPerPorsi) : 0;
-
-              return (
-                <div key={recipe.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                  {/* Header Kartu Menu */}
-                  <div className="bg-slate-50 border-b border-slate-200 p-5 flex justify-between items-center">
-                    <h3 className="font-black text-xl text-slate-800">{recipe.menuName}</h3>
-                    <button onClick={() => setRecipes(recipes.filter(r => r.id !== recipe.id))} className="text-slate-400 hover:text-red-500"><Trash2 size={20} /></button>
-                  </div>
-
-                  <div className="grid grid-cols-1 xl:grid-cols-2">
-                    {/* Kiri: Komposisi Bahan */}
-                    <div className="p-5 xl:border-r border-slate-200">
-                      <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><ShoppingCart size={16}/> Komposisi Bahan (HPP)</h4>
-                      <table className="w-full text-sm mb-4">
-                        <tbody className="divide-y divide-slate-100">
-                          {recipe.ingredients.map(ing => {
-                            const priceData = getAveragePrice(ing.itemName);
-                            return (
-                              <tr key={ing.id} className="group">
-                                <td className="py-2 font-medium">{ing.itemName}</td>
-                                <td className="py-2 text-right">{ing.quantity} {uniqueItems.find(u=>u.name===ing.itemName)?.unit}</td>
-                                <td className="py-2 text-right font-bold text-slate-700">{formatRp(priceData.price * ing.quantity)}</td>
-                                <td className="py-2 text-right"><button onClick={() => setRecipes(recipes.map(r => r.id === recipe.id ? {...r, ingredients: r.ingredients.filter(i => i.id !== ing.id)} : r))} className="text-red-400 opacity-0 group-hover:opacity-100"><Trash2 size={14}/></button></td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        <tfoot>
-                          <tr className="bg-slate-50">
-                            <td colSpan="2" className="py-3 px-2 font-bold text-slate-700">Total HPP Bahan / Porsi:</td>
-                            <td colSpan="2" className="py-3 px-2 text-right font-black text-lg text-rose-600">{formatRp(hppBahan)}</td>
+                    <div className="flex gap-2">
+                      <div className="flex-1"><label className="text-sm font-semibold">Kuantitas</label><input type="number" step="0.01" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" value={newPurchase.quantity} onChange={e => setNewPurchase({ ...newPurchase, quantity: e.target.value })} required /></div>
+                      <div className="w-24"><label className="text-sm font-semibold">Satuan</label><select className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" value={newPurchase.unit} onChange={e => setNewPurchase({ ...newPurchase, unit: e.target.value })}>
+                        <option value="kg">kg</option>
+                        <option value="gram">gram</option>
+                        <option value="liter">liter</option>
+                        <option value="ml">ml</option>
+                        <option value="pcs">pcs</option>
+                        <option value="pack">pack</option>
+                        <option value="ikat">ikat</option>
+                        <option value="botol">botol</option>
+                        <option value="bungkus">bungkus</option>
+                        <option value="jerigen">jerigen</option>
+                        <option value="kaleng">kaleng</option>
+                      </select></div>
+                    </div>
+                    <div><label className="text-sm font-semibold">Total Bayar (Rp)</label><input type="number" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" value={newPurchase.totalPrice} onChange={e => setNewPurchase({ ...newPurchase, totalPrice: e.target.value })} required /></div>
+                    <button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 text-white p-3 rounded-lg font-bold">Simpan ke Cloud</button>
+                  </form>
+                </div>
+                <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                  <h2 className="text-lg font-bold mb-4 border-b pb-2">Riwayat Belanja Bahan</h2>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm whitespace-nowrap">
+                      <thead><tr className="bg-slate-50 text-slate-500"><th className="p-3 text-left rounded-l-lg">Tanggal</th><th className="p-3 text-left">Bahan</th><th className="p-3 text-left">Qty</th><th className="p-3 text-right">Total</th><th className="p-3 text-right">Harga/Satuan</th><th className="p-3 rounded-r-lg"></th></tr></thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {purchases.sort((a, b) => new Date(b.date) - new Date(a.date)).map(p => (
+                          <tr key={p.id}>
+                            <td className="p-3">{p.date}</td>
+                            <td className="p-3 font-semibold">{p.itemName}</td>
+                            <td className="p-3">{p.quantity} {p.unit}</td>
+                            <td className="p-3 text-right">{formatRp(p.totalPrice)}</td>
+                            <td className="p-3 text-right text-emerald-600 font-medium">{formatRp(p.totalPrice / p.quantity)}</td>
+                            <td className="p-3 text-center">
+                              <button onClick={() => handleDeletePurchase(p.id)} className="text-red-400 hover:bg-red-50 p-2 rounded">
+                                <i className="fas fa-trash-alt"></i>
+                              </button>
+                            </td>
                           </tr>
-                        </tfoot>
-                      </table>
+                        ))}
+                      </tbody>
+                    </table>
+                    {purchases.length === 0 && <p className="text-center text-slate-400 p-4">Belum ada data di Spreadsheet.</p>}
+                  </div>
+                </div>
+              </div>
+            )}
 
-                      {selectedRecipeId === recipe.id ? (
-                        <form onSubmit={(e) => handleAddIngredient(recipe.id, e)} className="flex gap-2 p-3 bg-slate-50 rounded-xl">
-                          <select className="flex-1 p-2 rounded outline-none border border-slate-200" value={newIngredient.itemName} onChange={e => setNewIngredient({...newIngredient, itemName: e.target.value})} required>
-                            <option value="">Pilih Bahan...</option>
-                            {uniqueItems.map((item, idx) => <option key={idx} value={item.name}>{item.name}</option>)}
-                          </select>
-                          <input type="number" step="0.001" placeholder="Qty" className="w-20 p-2 rounded outline-none border border-slate-200" value={newIngredient.quantity} onChange={e => setNewIngredient({...newIngredient, quantity: e.target.value})} required />
-                          <button type="submit" className="bg-slate-800 text-white px-3 rounded font-bold">OK</button>
-                        </form>
-                      ) : (
-                        <button onClick={() => setSelectedRecipeId(recipe.id)} className="w-full py-2 border-2 border-dashed border-slate-200 text-slate-500 rounded-xl font-semibold hover:bg-slate-50 transition-colors">+ Tambah Bahan</button>
-                      )}
+            {/* TAB 2: OVERHEAD */}
+            {activeTab === 'overhead' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                  <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2">
+                    <i className="fas fa-cog text-lg"></i> Input Biaya Tetap per Bulan
+                  </h2>
+                  <p className="text-sm text-slate-500 mb-6">Biaya ini akan digunakan untuk menghitung Target Penjualan (Break Even Point).</p>
+
+                  <form onSubmit={handleAddOverhead} className="space-y-4 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <div>
+                      <label className="text-sm font-semibold">Nama Biaya</label>
+                      <input type="text" placeholder="Contoh: Gaji Pegawai 2 orang" className="w-full p-2.5 mt-1 border border-slate-200 rounded-lg outline-none" value={newOverhead.name} onChange={e => setNewOverhead({ ...newOverhead, name: e.target.value })} required />
                     </div>
+                    <div>
+                      <label className="text-sm font-semibold">Nominal per Bulan (Rp)</label>
+                      <input type="number" className="w-full p-2.5 mt-1 border border-slate-200 rounded-lg outline-none" value={newOverhead.amount} onChange={e => setNewOverhead({ ...newOverhead, amount: e.target.value })} required />
+                    </div>
+                    <button type="submit" className="w-full bg-slate-800 text-white p-2.5 rounded-lg font-bold flex justify-center items-center gap-2">
+                      <i className="fas fa-cloud-upload-alt"></i> Tambah Biaya ke Cloud
+                    </button>
+                  </form>
 
-                    {/* Kanan: Profitabilitas & BEP */}
-                    <div className="p-5 bg-slate-800 text-white">
-                      <h4 className="font-bold text-emerald-400 mb-4 flex items-center gap-2"><Target size={18}/> Analisis Profitabilitas</h4>
-                      
-                      <div className="space-y-4">
-                        {/* Pengaturan Margin */}
-                        <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600 flex justify-between items-center">
-                          <div>
-                            <p className="text-sm text-slate-300 font-medium">Target Margin Profit (%)</p>
-                            <p className="text-xs text-slate-400 mt-1">Sisa persentase setelah dikurangi HPP</p>
-                          </div>
-                          <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1 border border-slate-600">
-                            <input 
-                              type="number" 
-                              min="1" max="99" 
-                              className="w-16 bg-transparent text-center text-xl font-bold text-white outline-none"
-                              value={recipe.targetMarginPercent}
-                              onChange={e => setRecipes(recipes.map(r => r.id === recipe.id ? {...r, targetMarginPercent: Number(e.target.value)} : r))}
-                            />
-                            <span className="text-slate-400 pr-2 font-bold">%</span>
-                          </div>
+                  <div className="space-y-2">
+                    {overheadCosts.map(cost => (
+                      <div key={cost.id} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg hover:bg-slate-50">
+                        <span className="font-medium text-slate-700">{cost.name}</span>
+                        <div className="flex items-center gap-4">
+                          <span className="font-bold text-slate-900">{formatRp(cost.amount)}</span>
+                          <button onClick={() => handleDeleteOverhead(cost.id)} className="text-red-400 p-2 rounded hover:bg-red-50">
+                            <i className="fas fa-trash-alt"></i>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {overheadCosts.length === 0 && <p className="text-center text-slate-400 p-4">Belum ada data overhead.</p>}
+                  </div>
+                </div>
+
+                <div className="bg-slate-800 text-white p-8 rounded-2xl shadow-md h-fit relative overflow-hidden">
+                  <div className="absolute -right-10 -top-10 opacity-10">
+                    <i className="fas fa-calculator text-[200px]"></i>
+                  </div>
+                  <h3 className="text-slate-300 font-semibold mb-2">Total Biaya Operasional / Bulan</h3>
+                  <div className="text-4xl font-black text-emerald-400 mb-4">{formatRp(totalOverheadMonthly)}</div>
+                  <p className="text-slate-300 text-sm leading-relaxed relative z-10">
+                    Ini adalah total biaya (karyawan, sewa, listrik, dll) yang harus Anda keluarkan setiap bulannya, <strong>terlepas dari laku atau tidaknya makanan Anda.</strong>
+                  </p>
+                  <div className="mt-6 p-4 bg-slate-700/50 rounded-xl border border-slate-600 relative z-10">
+                    <p className="text-sm text-amber-200 flex items-start gap-2">
+                      <i className="fas fa-exclamation-circle shrink-0 mt-1"></i>
+                      <span>Keuntungan Kotor (Harga Jual - Modal Bahan) dari setiap porsi yang terjual akan digunakan untuk menutupi biaya operasional ini.</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: COSTING */}
+            {activeTab === 'recipes' && (
+              <div className="space-y-6">
+
+                {/* Buat Menu Baru */}
+                <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4">
+                  <input type="text" placeholder="Nama Menu Baru (cth: Ayam Goreng Geprek)" className="flex-1 p-3 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 font-medium" value={newMenuName} onChange={e => setNewMenuName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddMenu(e)} />
+                  <button onClick={handleAddMenu} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-bold flex justify-center items-center gap-2">
+                    <i className="fas fa-plus"></i> Buat Menu Baru
+                  </button>
+                </div>
+
+                {/* List Menu */}
+                {recipes.length === 0 && (
+                  <div className="text-center p-8 bg-white rounded-2xl border border-dashed border-slate-300 text-slate-400">
+                    <i className="fas fa-utensils text-4xl mb-3 block"></i>
+                    Belum ada menu tersimpan di Spreadsheet. Buat menu baru di atas!
+                  </div>
+                )}
+
+                {recipes.map(recipe => {
+                  const hppBahan = recipe.ingredients.reduce((total, ing) => total + (getAveragePrice(ing.itemName).price * ing.quantity), 0);
+                  const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
+                  const profitPerPorsi = hargaJualIdeal - hppBahan;
+                  const bepPorsi = profitPerPorsi > 0 ? Math.ceil(totalOverheadMonthly / profitPerPorsi) : 0;
+
+                  return (
+                    <div key={recipe.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                      <div className="bg-slate-50 border-b border-slate-200 p-5 flex justify-between items-center">
+                        <h3 className="font-black text-xl text-slate-800">{recipe.menuName}</h3>
+                        <button onClick={() => handleDeleteRecipe(recipe.id)} className="text-slate-400 hover:text-red-500 p-2">
+                          <i className="fas fa-trash-alt text-lg"></i>
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 xl:grid-cols-2">
+                        {/* Kiri: HPP */}
+                        <div className="p-5 xl:border-r border-slate-200">
+                          <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
+                            <i className="fas fa-shopping-cart"></i> Komposisi Bahan (HPP)
+                          </h4>
+                          <table className="w-full text-sm mb-4">
+                            <tbody className="divide-y divide-slate-100">
+                              {recipe.ingredients.map(ing => {
+                                const priceData = getAveragePrice(ing.itemName);
+                                return (
+                                  <tr key={ing.id} className="group">
+                                    <td className="py-2 font-medium">{ing.itemName}</td>
+                                    <td className="py-2 text-right">{ing.quantity} {uniqueItems.find(u => u.name === ing.itemName)?.unit}</td>
+                                    <td className="py-2 text-right font-bold text-slate-700">{formatRp(priceData.price * ing.quantity)}</td>
+                                    <td className="py-2 text-right">
+                                      <button onClick={() => handleDeleteIngredient(recipe.id, ing.id)} className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-2">
+                                        <i className="fas fa-trash-alt"></i>
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr className="bg-slate-50">
+                                <td colSpan="2" className="py-3 px-2 font-bold text-slate-700">Total HPP Bahan / Porsi:</td>
+                                <td colSpan="2" className="py-3 px-2 text-right font-black text-lg text-rose-600">{formatRp(hppBahan)}</td>
+                              </tr>
+                            </tfoot>
+                          </table>
+
+                          {selectedRecipeId === recipe.id ? (
+                            <form onSubmit={(e) => handleAddIngredient(recipe.id, e)} className="flex gap-2 p-3 bg-slate-50 rounded-xl">
+                              <select className="flex-1 p-2 rounded outline-none border border-slate-200 text-sm" value={newIngredient.itemName} onChange={e => setNewIngredient({ ...newIngredient, itemName: e.target.value })} required>
+                                <option value="">Pilih Bahan...</option>
+                                {uniqueItems.map((item, idx) => <option key={idx} value={item.name}>{item.name}</option>)}
+                              </select>
+                              <input type="number" step="0.001" placeholder="Qty" className="w-20 p-2 rounded outline-none border border-slate-200 text-sm" value={newIngredient.quantity} onChange={e => setNewIngredient({ ...newIngredient, quantity: e.target.value })} required />
+                              <button type="submit" className="bg-slate-800 text-white px-4 rounded font-bold">OK</button>
+                            </form>
+                          ) : (
+                            <button onClick={() => setSelectedRecipeId(recipe.id)} className="w-full py-2 border-2 border-dashed border-slate-200 text-slate-500 rounded-xl font-semibold hover:bg-slate-50 transition-colors">
+                              + Tambah Bahan
+                            </button>
+                          )}
                         </div>
 
-                        {/* Hasil Harga Jual */}
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-xl">
-                            <p className="text-xs text-emerald-300 font-medium uppercase tracking-wider mb-1">Rekomendasi Harga Jual</p>
-                            <p className="text-2xl font-black text-emerald-400">{formatRp(hargaJualIdeal)}</p>
-                            <p className="text-xs text-emerald-400/70 mt-1">Agar tercapai margin {recipe.targetMarginPercent}%</p>
-                          </div>
-                          <div className="bg-sky-500/10 border border-sky-500/30 p-4 rounded-xl">
-                            <p className="text-xs text-sky-300 font-medium uppercase tracking-wider mb-1">Profit Kotor / Porsi</p>
-                            <p className="text-2xl font-black text-sky-400">{formatRp(profitPerPorsi)}</p>
-                            <p className="text-xs text-sky-400/70 mt-1">Uang yang bisa dipakai bayar operasional</p>
+                        {/* Kanan: Profitabilitas */}
+                        <div className="p-5 bg-slate-800 text-white">
+                          <h4 className="font-bold text-emerald-400 mb-4 flex items-center gap-2">
+                            <i className="fas fa-bullseye"></i> Analisis Profitabilitas
+                          </h4>
+
+                          <div className="space-y-4">
+                            <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600 flex justify-between items-center">
+                              <div>
+                                <p className="text-sm text-slate-300 font-medium">Target Margin Profit (%)</p>
+                                <p className="text-xs text-slate-400 mt-1">Sisa persentase setelah dikurangi HPP</p>
+                              </div>
+                              <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1 border border-slate-600">
+                                <input
+                                  type="number"
+                                  min="1" max="99"
+                                  className="w-16 bg-transparent text-center text-xl font-bold text-white outline-none"
+                                  value={recipe.targetMarginPercent}
+                                  onChange={e => handleUpdateMargin(recipe.id, e.target.value)}
+                                />
+                                <span className="text-slate-400 pr-2 font-bold">%</span>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-xl">
+                                <p className="text-[10px] text-emerald-300 font-medium uppercase tracking-wider mb-1">Rekomendasi Harga Jual</p>
+                                <p className="text-xl md:text-2xl font-black text-emerald-400">{formatRp(hargaJualIdeal)}</p>
+                                <p className="text-xs text-emerald-400/70 mt-1">Agar margin {recipe.targetMarginPercent}%</p>
+                              </div>
+                              <div className="bg-sky-500/10 border border-sky-500/30 p-4 rounded-xl">
+                                <p className="text-[10px] text-sky-300 font-medium uppercase tracking-wider mb-1">Profit Kotor / Porsi</p>
+                                <p className="text-xl md:text-2xl font-black text-sky-400">{formatRp(profitPerPorsi)}</p>
+                                <p className="text-xs text-sky-400/70 mt-1">Sisa bersih dari resep</p>
+                              </div>
+                            </div>
+
+                            <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 mt-4">
+                              <p className="text-sm font-semibold text-amber-400 mb-2 flex items-center gap-2">
+                                <i className="fas fa-chart-line"></i> Target Balik Modal (BEP)
+                              </p>
+                              <p className="text-slate-300 text-sm mb-2">Jika Anda hanya menjual menu ini, Anda harus menjual:</p>
+                              <div className="flex items-end gap-2">
+                                <span className="text-4xl font-black text-white">{bepPorsi}</span>
+                                <span className="text-lg font-medium text-slate-400 mb-1">Porsi / Bulan</span>
+                              </div>
+                              <p className="text-xs text-slate-500 mt-2">({bepPorsi} porsi x {formatRp(profitPerPorsi)} = {formatRp(bepPorsi * profitPerPorsi)})</p>
+                            </div>
                           </div>
                         </div>
-
-                        {/* Break Even Point (Balik Modal) */}
-                        <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 mt-4">
-                           <p className="text-sm font-semibold text-amber-400 mb-2 flex items-center gap-2"><TrendingUp size={16}/> Target Balik Modal (BEP)</p>
-                           <p className="text-slate-300 text-sm mb-2">Jika Anda hanya menjual menu ini, Anda harus menjual:</p>
-                           <div className="flex items-end gap-2">
-                             <span className="text-4xl font-black text-white">{bepPorsi}</span>
-                             <span className="text-lg font-medium text-slate-400 mb-1">Porsi / Bulan</span>
-                           </div>
-                           <p className="text-xs text-slate-500 mt-2">({bepPorsi} porsi x {formatRp(profitPerPorsi)} profit = {formatRp(bepPorsi * profitPerPorsi)} untuk menutup Biaya Operasional)</p>
-                        </div>
-
                       </div>
                     </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                  );
+                })}
+              </div>
+            )}
 
-      </div>
-    </div>
-  );
-}
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+
+</html>
