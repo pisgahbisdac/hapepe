@@ -19,6 +19,8 @@ const SHEET_PURCHASES = 'Purchases';
 const SHEET_OVERHEAD = 'Overhead';
 const SHEET_RECIPES = 'Recipes';
 const SHEET_SETTINGS = 'Settings';
+const SHEET_SALES = 'Sales';
+const SHEET_ADJUSTMENTS = 'Adjustments';
 
 /**
  * Run this function ONCE to set up the spreadsheet automatically.
@@ -57,6 +59,22 @@ function setup() {
     recipesSheet = ss.insertSheet(SHEET_RECIPES);
     recipesSheet.appendRow(['ID', 'MenuName', 'TargetMarginPercent', 'ImageUrl', 'YieldQty', 'YieldUnit', 'YieldType', 'Bahan 1', 'Qty 1', 'Satuan 1']);
     recipesSheet.getRange("A1:J1").setFontWeight("bold");
+  }
+
+  // Create Sales sheet
+  let salesSheet = ss.getSheetByName(SHEET_SALES);
+  if (!salesSheet) {
+    salesSheet = ss.insertSheet(SHEET_SALES);
+    salesSheet.appendRow(['ID', 'Date', 'RecipeID', 'QuantitySold']);
+    salesSheet.getRange("A1:D1").setFontWeight("bold");
+  }
+
+  // Create Adjustments sheet
+  let adjSheet = ss.getSheetByName(SHEET_ADJUSTMENTS);
+  if (!adjSheet) {
+    adjSheet = ss.insertSheet(SHEET_ADJUSTMENTS);
+    adjSheet.appendRow(['ID', 'Date', 'ItemName', 'Quantity', 'Reason']);
+    adjSheet.getRange("A1:E1").setFontWeight("bold");
   }
   
   // Delete the default "Sheet1" if it exists
@@ -180,7 +198,20 @@ function doGet(e) {
       data: {
         purchases: purchases,
         overheadCosts: overheadCosts,
-        recipes: recipes
+        recipes: recipes,
+        sales: readSheetData(ss.getSheetByName(SHEET_SALES)).map(row => ({
+          id: row.ID,
+          date: row.Date,
+          recipeId: row.RecipeID,
+          quantitySold: Number(row.QuantitySold)
+        })),
+        adjustments: readSheetData(ss.getSheetByName(SHEET_ADJUSTMENTS)).map(row => ({
+          id: row.ID,
+          date: row.Date,
+          itemName: row.ItemName,
+          quantity: Number(row.Quantity),
+          reason: row.Reason
+        }))
       }
     };
     
@@ -237,6 +268,22 @@ function doPost(e) {
         break;
       case 'updateRecipe':
         result = updateRecipeRow(data);
+        break;
+        
+      // --- SALES ---
+      case 'addSale':
+        result = addRowToSheet(SHEET_SALES, [data.id, data.date, data.recipeId, data.quantitySold]);
+        break;
+      case 'deleteSale':
+        result = deleteRowById(SHEET_SALES, data.id);
+        break;
+        
+      // --- ADJUSTMENTS ---
+      case 'addAdjustment':
+        result = addRowToSheet(SHEET_ADJUSTMENTS, [data.id, data.date, data.itemName, data.quantity, data.reason]);
+        break;
+      case 'deleteAdjustment':
+        result = deleteRowById(SHEET_ADJUSTMENTS, data.id);
         break;
         
       default:
