@@ -115,6 +115,16 @@
       return splitStr[1] !== undefined ? `${formattedInteger},${splitStr[1]}` : formattedInteger;
     };
 
+    const formatQtyInput = (value) => {
+      if (value === undefined || value === null) return '';
+      // Convert period to comma to allow user typing dot as decimal
+      let str = String(value).replace(/\./g, ',');
+      str = str.replace(/[^0-9,]/g, '');
+      const parts = str.split(',');
+      if (parts.length > 2) str = parts[0] + ',' + parts.slice(1).join('');
+      return str;
+    };
+
     const parseNumberInput = (value) => {
       return parseFloat(String(value).replace(/\./g, '').replace(',', '.')) || 0;
     };
@@ -184,10 +194,10 @@
                 const yieldMeta = ings.find(i => i.id === 'META_YIELD');
                 return {
                   ...r,
-                  yieldQty: yieldMeta ? formatNumberInput(yieldMeta.qty) : "1",
-                  yieldUnit: yieldMeta ? yieldMeta.unit : 'porsi',
-                  recipeType: yieldMeta ? (yieldMeta.type || 'final') : 'final',
-                  ingredients: ings.filter(i => i.id !== 'META_YIELD').map(i => ({ ...i, quantity: formatNumberInput(i.quantity) }))
+                  yieldQty: yieldMeta ? formatQtyInput(yieldMeta.qty) : "1",
+                  yieldUnit: yieldMeta ? yieldMeta.unit : "porsi",
+                  imageUrl: r.imageUrl || '',
+                  ingredients: ings.filter(i => i.id !== 'META_YIELD').map(i => ({ ...i, quantity: formatQtyInput(i.quantity) }))
                 };
               });
               setRecipes(loadedRecipes);
@@ -474,7 +484,7 @@
 
       const handleEditPurchase = (p) => {
         setEditingPurchaseId(p.id);
-        setEditPurchaseData({ ...p, quantity: formatNumberInput(p.quantity), totalPrice: formatNumberInput(p.totalPrice) });
+        setEditPurchaseData({ ...p, quantity: formatQtyInput(p.quantity), totalPrice: formatNumberInput(p.totalPrice) });
       };
 
       const handleSaveEditPurchase = (id) => {
@@ -645,7 +655,7 @@
           };
 
           sendApiRequest('updateRecipe', payload);
-          setRecipes(recipes.map(r => r.id === recipeId ? { ...recipe, ingredients: cleanedIngredients.map(i => ({ ...i, quantity: formatNumberInput(i.quantity) })), yieldQty: formatNumberInput(parsedYield) } : r));
+          setRecipes(recipes.map(r => r.id === recipeId ? { ...recipe, ingredients: cleanedIngredients.map(i => ({ ...i, quantity: formatQtyInput(i.quantity) })), yieldQty: formatQtyInput(parsedYield) } : r));
         }
       };
 
@@ -667,7 +677,7 @@
         let updatedRecipe = null;
         const newRecipes = recipes.map(r => {
           if (r.id === recipeId) {
-            updatedRecipe = { ...r, ingredients: [...r.ingredients, { id: Date.now(), itemName: newIngredient.itemName, quantity: formatNumberInput(parsedQty) }] };
+            updatedRecipe = { ...r, ingredients: [...r.ingredients, { id: Date.now(), itemName: newIngredient.itemName, quantity: formatQtyInput(parsedQty) }] };
             return updatedRecipe;
           }
           return r;
@@ -893,7 +903,7 @@
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <label className="text-sm font-semibold">Kuantitas</label>
-                        <input type="text" inputMode="decimal" placeholder="Qty" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" value={newPurchase.quantity} onChange={e => setNewPurchase({ ...newPurchase, quantity: formatNumberInput(e.target.value) })} required />
+                        <input type="text" inputMode="decimal" placeholder="Qty" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" value={newPurchase.quantity} onChange={e => setNewPurchase({ ...newPurchase, quantity: formatQtyInput(e.target.value) })} required />
                       </div>
                       <div className="w-24">
                         <label className="text-sm font-semibold">Satuan</label>
@@ -959,7 +969,7 @@
                                     <input type="text" className="p-2 border border-slate-200 rounded-lg w-full text-sm outline-none focus:border-blue-500" value={editPurchaseData.itemName} onChange={e => setEditPurchaseData({...editPurchaseData, itemName: e.target.value})} />
                                   </td>
                                   <td className="p-3 flex gap-1">
-                                    <input type="text" placeholder="Qty" title="Kuantitas" className="p-2 border border-slate-200 rounded-lg w-16 text-sm outline-none focus:border-blue-500" value={editPurchaseData.quantity} onChange={e => setEditPurchaseData({...editPurchaseData, quantity: formatNumberInput(e.target.value)})} />
+                                    <input type="text" placeholder="Qty" title="Kuantitas" className="p-2 border border-slate-200 rounded-lg w-16 text-sm outline-none focus:border-blue-500" value={editPurchaseData.quantity} onChange={e => setEditPurchaseData({...editPurchaseData, quantity: formatQtyInput(e.target.value)})} />
                                     <select title="Satuan" className="p-2 border border-slate-200 rounded-lg w-20 text-sm outline-none focus:border-blue-500" value={editPurchaseData.unit} onChange={e => setEditPurchaseData({...editPurchaseData, unit: e.target.value})}>
                                       <option value="kg">kg</option>
                                       <option value="gram">gram</option>
@@ -1166,7 +1176,7 @@
                                         inputMode="decimal"
                                         className="w-16 p-1 border border-slate-200 rounded text-center text-sm outline-none focus:border-emerald-500"
                                         value={ing.quantity}
-                                        onChange={(e) => handleEditIngredientQty(recipe.id, ing.id, formatNumberInput(e.target.value))}
+                                        onChange={(e) => handleEditIngredientQty(recipe.id, ing.id, formatQtyInput(e.target.value))}
                                         onBlur={() => handleSaveRecipe(recipe.id)}
                                       />
                                       <span className="ml-1 text-xs font-bold text-slate-500 uppercase">{uniqueItems.find(u => u.name === ing.itemName)?.unit || '-'}</span>
@@ -1204,7 +1214,7 @@
                                 {uniqueItems.map((item, idx) => <option key={idx} value={item.name} />)}
                               </datalist>
                               <div className="flex items-center gap-1 bg-white border border-slate-200 rounded pr-2">
-                                <input type="text" inputMode="decimal" placeholder="Qty" className="w-16 p-2 outline-none text-sm bg-transparent" value={newIngredient.quantity} onChange={e => setNewIngredient({ ...newIngredient, quantity: formatNumberInput(e.target.value) })} required />
+                                <input type="text" inputMode="decimal" placeholder="Qty" className="w-16 p-2 outline-none text-sm bg-transparent" value={newIngredient.quantity} onChange={e => setNewIngredient({ ...newIngredient, quantity: formatQtyInput(e.target.value) })} required />
                                 <span className="text-xs font-bold text-slate-500 uppercase">
                                   {uniqueItems.find(u => u.name.toLowerCase() === (newIngredient.itemName || '').toLowerCase())?.unit || '-'}
                                 </span>
@@ -1245,7 +1255,7 @@
                                     inputMode="decimal"
                                     className="w-20 p-2 border border-slate-200 rounded text-right outline-none focus:border-emerald-500 text-sm"
                                     value={recipe.yieldQty}
-                                    onChange={e => handleUpdateYield(recipe.id, formatNumberInput(e.target.value), recipe.yieldUnit)}
+                                    onChange={e => handleUpdateYield(recipe.id, formatQtyInput(e.target.value), recipe.yieldUnit)}
                                     onBlur={(e) => handleSaveRecipe(recipe.id, { ...recipe, yieldQty: e.target.value })}
                                   />
                                   <select
@@ -1483,7 +1493,7 @@
                                     min="0"
                                     className="w-24 text-center p-2 border border-slate-200 rounded-lg outline-none focus:border-emerald-500 font-bold text-slate-700 bg-white"
                                     placeholder="0"
-                                    value={salesSimulation[recipe.id] !== undefined ? formatNumberInput(salesSimulation[recipe.id]) : ''}
+                                    value={salesSimulation[recipe.id] !== undefined ? formatQtyInput(salesSimulation[recipe.id]) : ''}
                                     onChange={(e) => handleSalesSimulationChange(recipe.id, parseNumberInput(e.target.value))}
                                   />
                                 </div>
@@ -1577,9 +1587,9 @@
                     </button>
 
                     <div className="flex flex-col md:flex-row h-full">
-                      <div className="w-full md:w-2/5 h-64 md:h-auto bg-slate-100 relative">
+                      <div className="w-full md:w-1/2 h-64 md:h-auto bg-slate-100 relative p-4 md:p-8 flex items-center justify-center">
                         {recipe.imageUrl ? (
-                          <img src={recipe.imageUrl} className="w-full h-full object-contain bg-slate-800" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                          <img src={recipe.imageUrl} className="max-w-full max-h-full object-contain rounded-xl drop-shadow-md" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
                         ) : (
                           <div className="w-full h-full flex flex-col items-center justify-center text-slate-300">
                             <i className="fas fa-image text-5xl mb-3"></i>
@@ -1588,7 +1598,7 @@
                         )}
                       </div>
 
-                      <div className="w-full md:w-3/5 p-6 md:p-8 flex flex-col max-h-[80vh] overflow-y-auto">
+                      <div className="w-full md:w-1/2 p-6 md:p-8 flex flex-col max-h-[80vh] overflow-y-auto">
                         <h2 className="text-3xl font-black text-slate-800 mb-2">{recipe.menuName}</h2>
                         <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full mb-6 w-max border border-emerald-200">
                           <i className="fas fa-check-circle"></i> Siap Jual ({formatNum(recipe.yieldQty)} {recipe.yieldUnit})
@@ -1667,7 +1677,7 @@
                       </div>
                       <div>
                         <label className="text-sm font-semibold">Jumlah Terjual (Porsi)</label>
-                        <input type="text" inputMode="decimal" placeholder="Contoh: 15" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500" value={newSale.quantitySold} onChange={e => setNewSale({ ...newSale, quantitySold: formatNumberInput(e.target.value) })} required />
+                        <input type="text" inputMode="decimal" placeholder="Contoh: 15" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500" value={newSale.quantitySold} onChange={e => setNewSale({ ...newSale, quantitySold: formatQtyInput(e.target.value) })} required />
                       </div>
                       <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-lg font-bold flex justify-center items-center gap-2">
                         <i className="fas fa-save"></i> Simpan Penjualan
@@ -1692,7 +1702,7 @@
                       <div className="flex gap-2">
                         <div className="flex-1">
                           <label className="text-sm font-semibold">Jumlah (Qty)</label>
-                          <input type="text" inputMode="decimal" placeholder="Contoh: 5" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500" value={newAdjustment.quantity} onChange={e => setNewAdjustment({ ...newAdjustment, quantity: formatNumberInput(e.target.value) })} required />
+                          <input type="text" inputMode="decimal" placeholder="Contoh: 5" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500" value={newAdjustment.quantity} onChange={e => setNewAdjustment({ ...newAdjustment, quantity: formatQtyInput(e.target.value) })} required />
                         </div>
                         <div className="flex-1">
                           <label className="text-sm font-semibold">Alasan</label>
