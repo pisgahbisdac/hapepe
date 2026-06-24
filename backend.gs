@@ -18,6 +18,7 @@
 const SHEET_PURCHASES = 'Purchases';
 const SHEET_OVERHEAD = 'Overhead';
 const SHEET_RECIPES = 'Recipes';
+const SHEET_SETTINGS = 'Settings';
 
 /**
  * Run this function ONCE to set up the spreadsheet automatically.
@@ -25,6 +26,15 @@ const SHEET_RECIPES = 'Recipes';
 function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
+  // Create Settings sheet for Password
+  let settingsSheet = ss.getSheetByName(SHEET_SETTINGS);
+  if (!settingsSheet) {
+    settingsSheet = ss.insertSheet(SHEET_SETTINGS);
+    settingsSheet.appendRow(['Key', 'Value']);
+    settingsSheet.getRange("A1:B1").setFontWeight("bold");
+    settingsSheet.appendRow(['PASSWORD', 'admin123']);
+  }
+
   // Create Purchases sheet
   let purchasesSheet = ss.getSheetByName(SHEET_PURCHASES);
   if (!purchasesSheet) {
@@ -56,12 +66,39 @@ function setup() {
   }
 }
 
+function verifyPassword(ss, inputPassword) {
+  let sheet = ss.getSheetByName(SHEET_SETTINGS);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_SETTINGS);
+    sheet.appendRow(['Key', 'Value']);
+    sheet.getRange("A1:B1").setFontWeight("bold");
+    sheet.appendRow(['PASSWORD', 'admin123']);
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  let correctPassword = 'admin123';
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === 'PASSWORD') {
+      correctPassword = String(data[i][1] || '').trim();
+      break;
+    }
+  }
+  
+  return String(inputPassword || '').trim() === correctPassword;
+}
+
 /**
  * Handle GET requests (Fetch Initial Data)
  */
 function doGet(e) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // Auth Check
+    const password = e && e.parameter ? e.parameter.password : '';
+    if (!verifyPassword(ss, password)) {
+      return createJsonResponse({ status: 'unauthorized', message: 'Sandi salah atau belum diisi' });
+    }
     
     // Read Purchases
     const purchasesData = readSheetData(ss.getSheetByName(SHEET_PURCHASES));
@@ -120,6 +157,14 @@ function doGet(e) {
 function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // Auth Check
+    const password = payload.password;
+    if (!verifyPassword(ss, password)) {
+      return createJsonResponse({ status: 'unauthorized', message: 'Sandi salah atau belum diisi' });
+    }
+
     const action = payload.action;
     const data = payload.data;
     
