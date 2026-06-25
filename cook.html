@@ -64,9 +64,12 @@
       };
 
       const parseNumberInput = (str) => {
+        if (typeof str === 'number') return str;
         if (str === null || str === undefined || str === '') return 0;
-        let s = String(str).replace(/\./g, '');
-        s = s.replace(/,/g, '.');
+        let s = String(str);
+        if (s.includes(',')) {
+           s = s.replace(/\./g, '').replace(/,/g, '.');
+        }
         const n = parseFloat(s);
         return isNaN(n) ? 0 : n;
       };
