@@ -206,13 +206,16 @@
                 const ings = Array.isArray(r.ingredients) ? r.ingredients : [];
                 const yieldMeta = ings.find(i => i.id === 'META_YIELD');
                 const statusMeta = ings.find(i => i.itemName === 'META_STATUS');
+                const categoryMeta = ings.find(i => i.itemName === 'META_CATEGORY');
                 return {
                   ...r,
                   isActive: statusMeta ? (String(statusMeta.quantity) === 'true') : true,
+                  recipeType: yieldMeta ? (yieldMeta.type || 'final') : 'final',
+                  category: categoryMeta ? String(categoryMeta.quantity || '') : '',
                   yieldQty: yieldMeta ? formatQtyInput(yieldMeta.qty) : "1",
                   yieldUnit: yieldMeta ? yieldMeta.unit : "porsi",
                   imageUrl: r.imageUrl || '',
-                  ingredients: ings.filter(i => i.id !== 'META_YIELD' && i.itemName !== 'META_STATUS').map(i => ({ ...i, quantity: formatQtyInput(i.quantity) }))
+                  ingredients: ings.filter(i => i.id !== 'META_YIELD' && i.itemName !== 'META_STATUS' && i.itemName !== 'META_CATEGORY').map(i => ({ ...i, quantity: formatQtyInput(i.quantity) }))
                 };
               });
               setRecipes(loadedRecipes);
@@ -366,7 +369,18 @@
 
         const getBucket = (dateStr) => {
            if (!filterYearMonth) return 'current';
-           const d = dateStr ? dateStr.substring(0, 7) : '';
+           if (!dateStr) return 'current';
+           // Handle various date formats from Google Sheets (ISO with timezone, or plain string)
+           let d = '';
+           if (typeof dateStr === 'string' && dateStr.includes('T')) {
+             // ISO format like "2025-12-31T17:00:00.000Z" — parse to local date
+             const dt = new Date(dateStr);
+             const y = dt.getFullYear();
+             const m = String(dt.getMonth() + 1).padStart(2, '0');
+             d = `${y}-${m}`;
+           } else {
+             d = String(dateStr).substring(0, 7);
+           }
            if (d < filterYearMonth) return 'awal';
            if (d === filterYearMonth) return 'current';
            return 'future';
@@ -527,7 +541,7 @@
             return [
               `"${item.name}"`,
               item.unit,
-              item.price,
+              Math.round(item.price),
               item.stokAwal,
               item.masuk,
               item.keluarSales,
@@ -1283,8 +1297,27 @@
                   </div>
                 )}
 
-                
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {recipes.length > 0 && (
+                  <div className="flex flex-wrap gap-3 items-center">
+                    <span className="bg-white border border-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
+                      <i className="fas fa-utensils text-emerald-500"></i> Total: {recipes.length}
+                    </span>
+                    <span className="bg-white border border-emerald-200 text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
+                      <i className="fas fa-store"></i> Menu Jual: {recipes.filter(r => r.recipeType !== 'sub').length}
+                    </span>
+                    <span className="bg-white border border-amber-200 text-amber-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
+                      <i className="fas fa-box-open"></i> Setengah Jadi: {recipes.filter(r => r.recipeType === 'sub').length}
+                    </span>
+                    <span className="bg-white border border-sky-200 text-sky-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
+                      <i className="fas fa-check-circle"></i> Aktif: {recipes.filter(r => r.isActive !== false).length}
+                    </span>
+                    <span className="bg-white border border-slate-300 text-slate-500 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
+                      <i className="fas fa-power-off"></i> Nonaktif: {recipes.filter(r => r.isActive === false).length}
+                    </span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                   {[...recipes].sort((a, b) => (a.isActive === false ? 1 : 0) - (b.isActive === false ? 1 : 0)).map(recipe => {
                     const hppBahan = calculateRecipeHPP(recipe.id);
                     const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
@@ -1332,8 +1365,8 @@
                           </div>
                         </div>
 
-                        <div className="p-4 flex flex-col flex-1">
-                          <h3 className="font-bold text-lg text-slate-800 mb-3 truncate group-hover:text-emerald-600 transition-colors" title={recipe.menuName}>{recipe.menuName}</h3>
+                        <div className="p-3 flex flex-col flex-1">
+                          <h3 className="font-bold text-sm text-slate-800 mb-2 truncate group-hover:text-emerald-600 transition-colors" title={recipe.menuName}>{recipe.menuName}</h3>
                           
                           <div className="mt-auto space-y-2">
                             <div className="flex justify-between items-center text-xs">
@@ -2031,14 +2064,32 @@
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className="flex flex-wrap gap-3 items-center">
+                  <span className="bg-white border border-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
+                    <i className="fas fa-utensils text-emerald-500"></i> Total: {recipes.length}
+                  </span>
+                  <span className="bg-white border border-emerald-200 text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
+                    <i className="fas fa-store"></i> Menu Jual: {recipes.filter(r => r.recipeType !== 'sub').length}
+                  </span>
+                  <span className="bg-white border border-amber-200 text-amber-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
+                    <i className="fas fa-box-open"></i> Setengah Jadi: {recipes.filter(r => r.recipeType === 'sub').length}
+                  </span>
+                  <span className="bg-white border border-sky-200 text-sky-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
+                    <i className="fas fa-check-circle"></i> Aktif: {recipes.filter(r => r.isActive !== false).length}
+                  </span>
+                  <span className="bg-white border border-slate-300 text-slate-500 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
+                    <i className="fas fa-power-off"></i> Nonaktif: {recipes.filter(r => r.isActive === false).length}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                   {recipes.filter(r => r.recipeType !== 'sub' && r.menuName.toLowerCase().includes(searchKatalog.toLowerCase())).map(recipe => {
                     const hppBahan = calculateRecipeHPP(recipe.id);
                     const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
 
                     return (
                       <div key={recipe.id} onClick={() => setSelectedKatalogMenu(recipe)} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden group cursor-pointer hover:shadow-md hover:-translate-y-1 transition-all">
-                        <div className="h-48 bg-slate-100 relative overflow-hidden flex items-center justify-center">
+                        <div className="h-40 bg-slate-100 relative overflow-hidden flex items-center justify-center">
                           {recipe.imageUrl ? (
                             <img src={recipe.imageUrl} alt={recipe.menuName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
                           ) : (
@@ -2050,8 +2101,8 @@
                             <span className="text-white font-bold text-sm bg-emerald-600 px-3 py-1 rounded-full"><i className="fas fa-eye mr-1"></i> Lihat Rincian</span>
                           </div>
                         </div>
-                        <div className="p-5 flex flex-col h-full">
-                          <h3 className="font-black text-lg text-slate-800 mb-2 line-clamp-2 leading-tight">{recipe.menuName}</h3>
+                        <div className="p-3 flex flex-col h-full">
+                          <h3 className="font-black text-sm text-slate-800 mb-2 line-clamp-2 leading-tight">{recipe.menuName}</h3>
                           <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100 mb-4 w-max" title="Berdasarkan sisa stok inventori">
                             <i className="fas fa-boxes"></i> Bisa dibuat: {calculateMaxPortions(recipe.id)} {recipe.yieldUnit}
                           </div>
@@ -2322,7 +2373,7 @@
                       </div>
                       <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
                         <label className="text-sm font-semibold text-slate-600">Bulan:</label>
-                        <input type="month" className="p-1 border-none bg-transparent outline-none font-bold text-slate-800" value={inventoryFilterMonth} onChange={e => setInventoryFilterMonth(e.target.value)} />
+                        <input type="month" min="2020-01" className="p-1 border-none bg-transparent outline-none font-bold text-slate-800" value={inventoryFilterMonth} onChange={e => setInventoryFilterMonth(e.target.value)} />
                       </div>
                       <button onClick={handleExportExcel} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 transition-colors">
                         <i className="fas fa-file-excel"></i> Excel
@@ -2358,7 +2409,7 @@
                               onClick={() => setSelectedPriceDetailItem(item)}
                               title="Klik untuk melihat detail perhitungan"
                             >
-                              Rp {formatNum(item.price)}
+                              Rp {formatNum(Math.round(item.price))}
                               <i className="fas fa-info-circle ml-2 text-emerald-400 text-[10px]"></i>
                             </td>
                             <td className="p-3 text-center text-slate-600 font-medium">{formatNum(item.stokAwal)}</td>

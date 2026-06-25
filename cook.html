@@ -251,7 +251,7 @@
                 </div>
 
                 {/* Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                   {recipes.filter(r => r.ingredients?.find(i => i.id === 'META_YIELD')?.type !== 'sub' && r.menuName.toLowerCase().includes(searchKatalog.toLowerCase()) && String(r.ingredients?.find(i => i.itemName === 'META_STATUS')?.quantity) !== 'false').map(recipe => (
                     <div key={recipe.id} onClick={() => setSelectedKatalogMenu(recipe)} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden group cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col">
                       {/* Image Container: Aspect Square (1:1) full width */}
@@ -270,8 +270,8 @@
                           </span>
                         </div>
                       </div>
-                      <div className="p-5 flex-1 flex flex-col">
-                        <h3 className="font-black text-lg text-slate-800 mb-2 line-clamp-2 leading-tight">{recipe.menuName}</h3>
+                      <div className="p-3 flex-1 flex flex-col">
+                        <h3 className="font-black text-sm text-slate-800 mb-2 line-clamp-2 leading-tight">{recipe.menuName}</h3>
                         <div className="flex flex-wrap gap-2 mb-4">
                           {recipe.instructions ? (
                             <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200 shadow-sm">
