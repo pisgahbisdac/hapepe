@@ -151,7 +151,7 @@
           const r = recipes.find(rec => rec.id === recId);
           if (!r) return;
           r.ingredients.forEach(ing => {
-            if (ing.id === 'META_YIELD') return;
+            if (ing.id === 'META_YIELD' || ing.itemName === 'META_STATUS') return;
             const qty = parseNumberInput(ing.quantity) * mult;
             if (qty <= 0) return;
             const searchStr = String(ing.itemName || '').toLowerCase();
@@ -368,7 +368,7 @@
                           const uncategorized = [];
                           if (recipe.ingredients) {
                             recipe.ingredients.forEach(ing => {
-                              if (ing.id === 'META_YIELD') return;
+                              if (ing.id === 'META_YIELD' || ing.itemName === 'META_STATUS') return;
                               if (ing.category) {
                                 if (!groupedIngredients[ing.category]) groupedIngredients[ing.category] = [];
                                 groupedIngredients[ing.category].push(ing);
@@ -435,7 +435,7 @@
                                           ))}
                                         </React.Fragment>
                                       )}
-                                      {(!recipe.ingredients || recipe.ingredients.filter(i => i.id !== 'META_YIELD').length === 0) && (
+                                      {(!recipe.ingredients || recipe.ingredients.filter(i => i.id !== 'META_YIELD' && i.itemName !== 'META_STATUS').length === 0) && (
                                         <tr><td colSpan="3" className="py-4 text-center italic text-slate-400">Belum ada rincian bahan</td></tr>
                                       )}
                                     </tbody>
