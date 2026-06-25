@@ -21,6 +21,7 @@ const SHEET_RECIPES = 'Recipes';
 const SHEET_SETTINGS = 'Settings';
 const SHEET_SALES = 'Sales';
 const SHEET_ADJUSTMENTS = 'Adjustments';
+const SHEET_CONVERSIONS = 'Conversions';
 
 /**
  * Run this function ONCE to set up the spreadsheet automatically.
@@ -75,6 +76,14 @@ function setup() {
     adjSheet = ss.insertSheet(SHEET_ADJUSTMENTS);
     adjSheet.appendRow(['ID', 'Date', 'ItemName', 'Quantity', 'Reason']);
     adjSheet.getRange("A1:E1").setFontWeight("bold");
+  }
+
+  // Create Conversions sheet
+  let convSheet = ss.getSheetByName(SHEET_CONVERSIONS);
+  if (!convSheet) {
+    convSheet = ss.insertSheet(SHEET_CONVERSIONS);
+    convSheet.appendRow(['ItemName', 'PackUnit', 'BaseQty']);
+    convSheet.getRange("A1:C1").setFontWeight("bold");
   }
   
   // Delete the default "Sheet1" if it exists
@@ -212,6 +221,16 @@ function doGet(e) {
       }
     }
 
+    const convSheet = ss.getSheetByName(SHEET_CONVERSIONS);
+    let conversions = [];
+    if (convSheet) {
+      conversions = readSheetData(convSheet).map(row => ({
+        itemName: row.ItemName,
+        packUnit: row.PackUnit,
+        baseQty: Number(row.BaseQty)
+      }));
+    }
+
     const response = {
       status: 'success',
       data: {
@@ -230,7 +249,8 @@ function doGet(e) {
           itemName: row.ItemName,
           quantity: Number(row.Quantity),
           reason: row.Reason
-        }))
+        })),
+        conversions: conversions
       }
     };
     
@@ -424,6 +444,41 @@ function doPost(e) {
         result = deleteRowById(SHEET_ADJUSTMENTS, data.id);
         break;
         
+      // --- CONVERSIONS ---
+      case 'saveConversion':
+        const convSheet = ss.getSheetByName(SHEET_CONVERSIONS);
+        let updated = false;
+        if (convSheet) {
+          const cData = convSheet.getDataRange().getValues();
+          for (let i = 1; i < cData.length; i++) {
+            if (cData[i][0] === data.itemName) {
+              convSheet.getRange(i + 1, 2).setValue(data.packUnit);
+              convSheet.getRange(i + 1, 3).setValue(data.baseQty);
+              updated = true;
+              break;
+            }
+          }
+        }
+        if (!updated) {
+          result = addRowToSheet(SHEET_CONVERSIONS, [data.itemName, data.packUnit, data.baseQty]);
+        } else {
+          result = { success: true };
+        }
+        break;
+      case 'deleteConversion':
+        const cSheet = ss.getSheetByName(SHEET_CONVERSIONS);
+        if (cSheet) {
+          const dData = cSheet.getDataRange().getValues();
+          for (let i = 1; i < dData.length; i++) {
+            if (dData[i][0] === data.itemName) {
+              cSheet.deleteRow(i + 1);
+              break;
+            }
+          }
+        }
+        result = { success: true };
+        break;
+
       default:
         throw new Error("Invalid action provided");
     }

@@ -161,7 +161,11 @@
       const [overheadCosts, setOverheadCosts] = useState([]);
       const [sales, setSales] = useState([]);
       const [adjustments, setAdjustments] = useState([]);
-
+      const [customConversions, setCustomConversions] = useState([]);
+      
+      const [showConversionModal, setShowConversionModal] = useState(false);
+      const [editingConversionItem, setEditingConversionItem] = useState(null);
+      const [newConversion, setNewConversion] = useState({ packUnit: 'Botol', baseQty: '' });
       const [searchBahan, setSearchBahan] = useState('');
       const [filterBulan, setFilterBulan] = useState('');
       const [inventoryFilterMonth, setInventoryFilterMonth] = useState(() => new Date().toISOString().slice(0, 7));
@@ -214,6 +218,7 @@
               setRecipes(loadedRecipes);
               setSales(res.data.sales || []);
               setAdjustments(res.data.adjustments || []);
+              setCustomConversions(res.data.conversions || []);
             } else if (res.status === 'unauthorized') {
               setIsLoggedIn(false);
               setLoginError(res.message || 'Sandi salah');
@@ -499,17 +504,38 @@
       // EXPORT HANDLERS
       // ==========================================
       const handleExportExcel = () => {
-         const headers = ['Nama Bahan', 'Satuan', 'Harga Rata-rata', 'Stok Awal', 'Masuk (Beli)', 'Keluar (Resep)', 'Keluar (Buang)', 'Stok Akhir'];
-         const rows = inventoryData.map(item => [
-            `"${item.name}"`,
-            item.unit,
-            item.price,
-            item.stokAwal,
-            item.masuk,
-            item.keluarSales,
-            item.keluarAdjustments,
-            item.stokAkhir
-         ]);
+         const headers = ['Nama Bahan', 'Satuan Dasar', 'Harga Rata-rata', 'Stok Awal', 'Masuk (Beli)', 'Keluar (Resep)', 'Keluar (Buang)', 'Stok Akhir', 'Konversi'];
+         const rows = inventoryData.map(item => {
+            const u = (item.unit || '').toLowerCase();
+            const customConv = customConversions.find(c => c.itemName === item.name);
+            let convStr = '';
+            
+            if (customConv && customConv.baseQty > 0) {
+              const val = item.stokAkhir / customConv.baseQty;
+              convStr = `"${formatNum(val)} ${customConv.packUnit}"`;
+            } else {
+              const convMap = { kg: { factor: 1000, to: 'gram' }, gram: { factor: 0.001, to: 'kg' }, liter: { factor: 1000, to: 'ml' }, ml: { factor: 0.001, to: 'liter' } };
+              const conv = convMap[u];
+              if (conv) {
+                const val = item.stokAkhir * conv.factor;
+                convStr = `"${formatNum(val)} ${conv.to}"`;
+              } else {
+                convStr = `"-"`;
+              }
+            }
+
+            return [
+              `"${item.name}"`,
+              item.unit,
+              item.price,
+              item.stokAwal,
+              item.masuk,
+              item.keluarSales,
+              item.keluarAdjustments,
+              item.stokAkhir,
+              convStr
+            ];
+         });
          
          const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -598,6 +624,28 @@
         setAdjustments([...adjustments, adjData]);
         sendApiRequest('addAdjustment', adjData);
         setNewAdjustment({ ...newAdjustment, itemName: '', quantity: '', reason: '' });
+      };
+
+      const handleSaveConversion = (e) => {
+        e.preventDefault();
+        const parsedBaseQty = parseNumberInput(newConversion.baseQty);
+        if (!newConversion.packUnit || parsedBaseQty <= 0) return;
+
+        const convData = { itemName: editingConversionItem, packUnit: newConversion.packUnit, baseQty: parsedBaseQty };
+        
+        let exists = false;
+        const updatedConversions = customConversions.map(c => {
+          if (c.itemName === editingConversionItem) {
+            exists = true;
+            return convData;
+          }
+          return c;
+        });
+        if (!exists) updatedConversions.push(convData);
+        
+        setCustomConversions(updatedConversions);
+        sendApiRequest('saveConversion', convData);
+        setShowConversionModal(false);
       };
 
       const handleDeleteAdjustment = (id) => {
@@ -2320,11 +2368,44 @@
                             <td className={`p-3 text-center font-black ${item.stokAkhir < 0 ? 'text-red-500 bg-red-50' : 'text-slate-800 bg-emerald-50/30'}`}>{formatNum(item.stokAkhir)}</td>
                             {(() => {
                               const u = (item.unit || '').toLowerCase();
-                              const convMap = { kg: { factor: 1000, to: 'gram' }, gram: { factor: 0.001, to: 'kg' }, liter: { factor: 1000, to: 'ml' }, ml: { factor: 0.001, to: 'liter' } };
-                              const conv = convMap[u];
-                              if (!conv) return <td className="p-3 text-center text-slate-400 text-xs bg-violet-50/30">-</td>;
-                              const val = item.stokAkhir * conv.factor;
-                              return <td className="p-3 text-center font-bold text-violet-700 bg-violet-50/30 text-xs">{formatNum(val)} <span className="uppercase font-black text-[9px] text-violet-400">{conv.to}</span></td>;
+                              const customConv = customConversions.find(c => c.itemName === item.name);
+                              let displayVal = null;
+                              let displayUnit = '';
+                              let isCustom = false;
+
+                              if (customConv && customConv.baseQty > 0) {
+                                displayVal = item.stokAkhir / customConv.baseQty;
+                                displayUnit = customConv.packUnit;
+                                isCustom = true;
+                              } else {
+                                const convMap = { kg: { factor: 1000, to: 'gram' }, gram: { factor: 0.001, to: 'kg' }, liter: { factor: 1000, to: 'ml' }, ml: { factor: 0.001, to: 'liter' } };
+                                const conv = convMap[u];
+                                if (conv) {
+                                  displayVal = item.stokAkhir * conv.factor;
+                                  displayUnit = conv.to;
+                                }
+                              }
+
+                              return (
+                                <td className="p-3 text-center text-xs bg-violet-50/30 relative group">
+                                  {displayVal !== null ? (
+                                    <>
+                                      <span className={`font-bold ${isCustom ? 'text-pink-600' : 'text-violet-700'}`}>{formatNum(displayVal)}</span>{' '}
+                                      <span className={`uppercase font-black text-[9px] ${isCustom ? 'text-pink-400' : 'text-violet-400'}`}>{displayUnit}</span>
+                                    </>
+                                  ) : (
+                                    <span className="text-slate-400">-</span>
+                                  )}
+                                  <button onClick={() => {
+                                    setEditingConversionItem(item.name);
+                                    if (customConv) setNewConversion({ packUnit: customConv.packUnit, baseQty: customConv.baseQty });
+                                    else setNewConversion({ packUnit: 'Botol', baseQty: '' });
+                                    setShowConversionModal(true);
+                                  }} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-violet-600 opacity-0 group-hover:opacity-100 transition-opacity" title="Atur Konversi Kemasan">
+                                    <i className="fas fa-cog"></i>
+                                  </button>
+                                </td>
+                              );
                             })()}
                           </tr>
                         ))}
@@ -2444,6 +2525,54 @@
                       <p className="text-sm text-slate-500 mt-2">Silakan catat pembelian untuk bahan ini terlebih dahulu di Tab "Input Belanja".</p>
                     </div>
                   )}
+                </div>
+              </div>
+            </div>
+          )}
+          {/* Modal Konversi Kemasan */}
+          {showConversionModal && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4 z-50 print-hide animate-fade-in">
+              <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-slide-up">
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-violet-50">
+                  <div>
+                    <h3 className="text-xl font-bold text-violet-800">Atur Konversi Stok</h3>
+                    <p className="text-sm text-violet-600 mt-1">{editingConversionItem}</p>
+                  </div>
+                  <button onClick={() => setShowConversionModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-violet-200 hover:bg-violet-300 text-violet-700 transition-colors">
+                    <i className="fas fa-times"></i>
+                  </button>
+                </div>
+                <div className="p-6">
+                  <form onSubmit={handleSaveConversion} className="space-y-4">
+                    <div className="bg-blue-50 p-4 rounded-xl text-sm text-blue-800 mb-6 border border-blue-100">
+                      Tentukan isi satuan dasar untuk setiap 1 kemasan. Misalnya: 1 <strong>Botol</strong> = 1000 <strong>ml</strong>, atau 1 <strong>Karung</strong> = 25000 <strong>gram</strong>.
+                    </div>
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1">
+                        <label className="text-sm font-semibold mb-1 block text-slate-700">Satuan Kemasan</label>
+                        <input type="text" placeholder="Cth: Botol, Karung" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-violet-500 font-bold" value={newConversion.packUnit} onChange={e => setNewConversion({ ...newConversion, packUnit: e.target.value })} required />
+                      </div>
+                      <div className="pb-3 font-black text-slate-400">=</div>
+                      <div className="flex-1">
+                        <label className="text-sm font-semibold mb-1 block text-slate-700">Isi (Satuan Dasar)</label>
+                        <input type="text" inputMode="decimal" placeholder="Cth: 1000" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-violet-500 font-bold" value={newConversion.baseQty} onChange={e => setNewConversion({ ...newConversion, baseQty: formatQtyInput(e.target.value) })} required />
+                      </div>
+                    </div>
+                    <div className="pt-4 flex gap-3">
+                      {customConversions.find(c => c.itemName === editingConversionItem) && (
+                        <button type="button" onClick={() => {
+                          setCustomConversions(customConversions.filter(c => c.itemName !== editingConversionItem));
+                          sendApiRequest('deleteConversion', { itemName: editingConversionItem });
+                          setShowConversionModal(false);
+                        }} className="w-full bg-red-100 hover:bg-red-200 text-red-600 p-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-colors">
+                          <i className="fas fa-trash"></i> Hapus Konversi
+                        </button>
+                      )}
+                      <button type="submit" className="w-full bg-violet-600 hover:bg-violet-700 text-white p-3 rounded-xl font-bold flex justify-center items-center gap-2 transition-colors">
+                        <i className="fas fa-save"></i> Simpan
+                      </button>
+                    </div>
+                  </form>
                 </div>
               </div>
             </div>
