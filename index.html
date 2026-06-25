@@ -1484,7 +1484,7 @@
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                       {(() => {
-                                        const categoryOrder = ['MAIN INGREDIENTS', 'CONDIMENTS', 'SEASONING', 'BATTER MIX', 'OTHERS'];
+                                        const categoryOrder = ['MAIN INGREDIENTS', 'CONDIMENTS', 'SEASONING', 'BATTER MIX', 'THICKENING MIX', 'MARINATION', 'HERBS', 'OTHERS'];
                                         const initialGroups = categoryOrder.reduce((acc, cat) => ({ ...acc, [cat]: [] }), {});
 
                                         const groupedIngredients = recipe.ingredients.reduce((acc, ing) => {
