@@ -1937,7 +1937,7 @@
                   let totalOmset = 0;
                   let totalHPP = 0;
 
-                  recipes.forEach(recipe => {
+                  recipes.filter(r => r.recipeType !== 'sub').forEach(recipe => {
                     const hppBahan = calculateRecipeHPP(recipe.id);
                     const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
 
@@ -2017,7 +2017,7 @@
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 block md:table-row-group">
-                        {recipes.map(recipe => {
+                        {recipes.filter(r => r.recipeType !== 'sub').map(recipe => {
                           const hppBahan = calculateRecipeHPP(recipe.id);
                           const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
                           const profitPerPorsi = hargaJualIdeal - hppBahan;
