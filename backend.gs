@@ -22,20 +22,20 @@ const SHEET_SETTINGS = 'Settings';
 const SHEET_SALES = 'Sales';
 const SHEET_ADJUSTMENTS = 'Adjustments';
 const SHEET_CONVERSIONS = 'Conversions';
-
+const SHEET_USERS = 'Users';
 /**
  * Run this function ONCE to set up the spreadsheet automatically.
  */
 function setup() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   
-  // Create Settings sheet for Password
-  let settingsSheet = ss.getSheetByName(SHEET_SETTINGS);
-  if (!settingsSheet) {
-    settingsSheet = ss.insertSheet(SHEET_SETTINGS);
-    settingsSheet.appendRow(['Key', 'Value']);
-    settingsSheet.getRange("A1:B1").setFontWeight("bold");
-    settingsSheet.appendRow(['PASSWORD', 'admin123']);
+  // Create Users sheet for User Management
+  let usersSheet = ss.getSheetByName(SHEET_USERS);
+  if (!usersSheet) {
+    usersSheet = ss.insertSheet(SHEET_USERS);
+    usersSheet.appendRow(['ID', 'Username', 'Password', 'Role']);
+    usersSheet.getRange("A1:D1").setFontWeight("bold");
+    usersSheet.appendRow([new Date().getTime(), 'admin', 'biev1234', 'admin']);
   }
 
   // Create Purchases sheet
@@ -93,25 +93,24 @@ function setup() {
   }
 }
 
-function verifyPassword(ss, inputPassword) {
-  let sheet = ss.getSheetByName(SHEET_SETTINGS);
+function verifyUser(ss, inputUsername, inputPassword) {
+  let sheet = ss.getSheetByName(SHEET_USERS);
   if (!sheet) {
-    sheet = ss.insertSheet(SHEET_SETTINGS);
-    sheet.appendRow(['Key', 'Value']);
-    sheet.getRange("A1:B1").setFontWeight("bold");
-    sheet.appendRow(['PASSWORD', 'admin123']);
+    // Fallback if setup hasn't run, create default admin
+    sheet = ss.insertSheet(SHEET_USERS);
+    sheet.appendRow(['ID', 'Username', 'Password', 'Role']);
+    sheet.getRange("A1:D1").setFontWeight("bold");
+    sheet.appendRow([new Date().getTime(), 'admin', 'biev1234', 'admin']);
   }
   
   const data = sheet.getDataRange().getValues();
-  let correctPassword = 'admin123';
   for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === 'PASSWORD') {
-      correctPassword = String(data[i][1] || '').trim();
-      break;
+    if (String(data[i][1]).trim() === String(inputUsername).trim() && String(data[i][2]).trim() === String(inputPassword).trim()) {
+      return { isValid: true, role: data[i][3] };
     }
   }
   
-  return String(inputPassword || '').trim() === correctPassword;
+  return { isValid: false, role: null };
 }
 
 /**
@@ -122,9 +121,11 @@ function doGet(e) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
     // Auth Check
+    const username = e && e.parameter ? e.parameter.username : '';
     const password = e && e.parameter ? e.parameter.password : '';
-    if (!verifyPassword(ss, password)) {
-      return createJsonResponse({ status: 'unauthorized', message: 'Sandi salah atau belum diisi' });
+    const authResult = verifyUser(ss, username, password);
+    if (!authResult.isValid) {
+      return createJsonResponse({ status: 'unauthorized', message: 'Username atau Sandi salah' });
     }
     
     // Read Purchases
@@ -253,6 +254,22 @@ function doGet(e) {
         conversions: conversions
       }
     };
+    
+    // Include user list only if the authenticated user is an admin
+    if (authResult.role === 'admin') {
+      const usersSheet = ss.getSheetByName(SHEET_USERS);
+      let usersList = [];
+      if (usersSheet) {
+        usersList = readSheetData(usersSheet).map(row => ({
+          id: row.ID,
+          username: row.Username,
+          password: row.Password,
+          role: row.Role
+        }));
+      }
+      response.data.users = usersList;
+    }
+    response.data.role = authResult.role;
     
     return createJsonResponse(response);
   } catch (error) {
@@ -385,9 +402,11 @@ function doPost(e) {
     }
 
     // Auth Check
+    const username = payload.username;
     const password = payload.password;
-    if (!verifyPassword(ss, password)) {
-      return createJsonResponse({ status: 'unauthorized', message: 'Sandi salah atau belum diisi' });
+    const authResult = verifyUser(ss, username, password);
+    if (!authResult.isValid) {
+      return createJsonResponse({ status: 'unauthorized', message: 'Username atau Sandi salah' });
     }
 
     const action = payload.action;
@@ -477,6 +496,20 @@ function doPost(e) {
           }
         }
         result = { success: true };
+        break;
+
+      // --- USERS ---
+      case 'addUser':
+        if (authResult.role !== 'admin') throw new Error("Unauthorized");
+        result = addRowToSheet(SHEET_USERS, [data.id, data.username, data.password, data.role]);
+        break;
+      case 'editUser':
+        if (authResult.role !== 'admin') throw new Error("Unauthorized");
+        result = editRowById(SHEET_USERS, data.id, [data.id, data.username, data.password, data.role]);
+        break;
+      case 'deleteUser':
+        if (authResult.role !== 'admin') throw new Error("Unauthorized");
+        result = deleteRowById(SHEET_USERS, data.id);
         break;
 
       default:
