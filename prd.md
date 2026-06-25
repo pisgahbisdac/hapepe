@@ -28,15 +28,19 @@ Aplikasi menggunakan arsitektur *Serverless* yang sangat hemat biaya:
   - Mendukung "Bahan Setengah Jadi" (*Sub-recipes*) yang bisa dipanggil kembali sebagai bahan baku di resep lain.
   - Perhitungan HPP berjalan secara dinamis mengikuti fluktuasi harga bahan di Tab Pembelian.
   - Input Target Margin (%) untuk merekomendasikan Harga Jual Ideal.
+  - **Mode Dapur (Kitchen Mode):** Memisahkan logika Berat Kotor (Costing) dengan Berat Bersih (Net Qty) serta Takaran Manual (Manual Measure) khusus untuk tampilan dapur.
+  - **Kartu Resep Profesional:** Pembangun resep terstruktur (*Recipe Builder*) untuk mengatur *Prep Time*, *Cook Time*, *Tools*, *Chef Note*, kategori bahan baku (*Categories*), serta memecah cara memasak menjadi Fase dan Proses ber-tabel (*Temp*, *Time*, *Notes*).
   - Gambar Produk (via URL link).
 
 ### 3.4. Simulasi Bisnis
 - **Fungsi:** Proyeksi profitabilitas bisnis bulanan.
 - **Logika Sistem:** Menggabungkan Biaya Operasional, HPP per menu, Harga Jual, dan Target Penjualan per menu untuk memproyeksikan Total Omset, Total HPP, Laba Kotor, dan Laba Bersih bulanan.
 
-### 3.5. Katalog Menu
-- **Fungsi:** Menampilkan menu akhir secara visual seperti layaknya *Point of Sales* atau buku menu.
-- **Fitur Khusus:** Fitur pencarian menu dan rincian komposisi resep jika menu diklik.
+### 3.5. Katalog Menu & Katalog Dapur
+- **Fungsi:** Menampilkan menu secara visual untuk publik (Katalog Publik) dan instruksi memasak detail untuk koki (Katalog Dapur).
+- **Fitur Khusus:** 
+  - *Public View* (`index.html`): Layaknya buku menu elektronik untuk tamu/pelayan tanpa mengekspos data HPP.
+  - *Kitchen View* (`cook.html`): Tampilan layar penuh (*Full Screen*) untuk koki yang secara otomatis menerjemahkan data *Recipe Builder* menjadi standar industri **Professional Recipe Card**. Bahan baku terkelompokkan otomatis dan instruksi memasak disajikan dalam format tabel matriks presisi.
 
 ### 3.6. Sistem Inventori Otomatis (Inventory & Stock)
 - **Fungsi:** Melacak sisa stok bahan baku secara otomatis tanpa perlu *stock opname* harian.

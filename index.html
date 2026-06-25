@@ -170,6 +170,7 @@
       const [newOverhead, setNewOverhead] = useState({ name: '', amount: '' });
       const [newPurchase, setNewPurchase] = useState({ date: '2026-06-24', itemName: '', unit: 'kg', quantity: '', totalPrice: '' });
       const [newMenuName, setNewMenuName] = useState('');
+      const [showKitchenConfig, setShowKitchenConfig] = useState(false);
       const [selectedRecipeId, setSelectedRecipeId] = useState(null);
       const [newIngredient, setNewIngredient] = useState({ itemName: '', quantity: '' });
 
@@ -810,6 +811,71 @@
       };
 
       // ==========================================
+      // DRAG AND DROP INGREDIENTS
+      // ==========================================
+      const handleDragStart = (e, recipeId, ingId, sourceCat) => {
+        e.dataTransfer.setData('text/plain', JSON.stringify({ recipeId, ingId, sourceCat }));
+        e.dataTransfer.effectAllowed = 'move';
+      };
+
+      const handleDropOnCategory = (e, targetRecipeId, targetCat) => {
+        e.preventDefault();
+        try {
+          const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+          if (data.recipeId !== targetRecipeId) return;
+          
+          const newRecipes = recipes.map(r => {
+            if (r.id !== targetRecipeId) return r;
+            const updatedIngs = r.ingredients.map(ing => {
+              if (ing.id === data.ingId) {
+                return { ...ing, category: targetCat === 'OTHERS' ? '' : targetCat };
+              }
+              return ing;
+            });
+            return { ...r, ingredients: updatedIngs };
+          });
+          setRecipes(newRecipes);
+          const updatedRecipe = newRecipes.find(r => r.id === targetRecipeId);
+          handleSaveRecipe(targetRecipeId, updatedRecipe);
+        } catch (err) {
+          console.error('DND Error', err);
+        }
+      };
+
+      const handleDropOnIngredient = (e, targetRecipeId, targetIngId, targetCat) => {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+          if (data.recipeId !== targetRecipeId) return;
+
+          const newRecipes = recipes.map(r => {
+            if (r.id !== targetRecipeId) return r;
+            
+            const ings = [...r.ingredients];
+            const dragIdx = ings.findIndex(i => i.id === data.ingId);
+            const dropIdx = ings.findIndex(i => i.id === targetIngId);
+            
+            if (dragIdx === -1 || dropIdx === -1) return r;
+            
+            const [draggedItem] = ings.splice(dragIdx, 1);
+            draggedItem.category = targetCat === 'OTHERS' ? '' : targetCat;
+            
+            const newDropIdx = ings.findIndex(i => i.id === targetIngId);
+            ings.splice(newDropIdx, 0, draggedItem);
+            
+            return { ...r, ingredients: ings };
+          });
+          
+          setRecipes(newRecipes);
+          const updatedRecipe = newRecipes.find(r => r.id === targetRecipeId);
+          handleSaveRecipe(targetRecipeId, updatedRecipe);
+        } catch (err) {
+          console.error('DND Error', err);
+        }
+      };
+
+      // ==========================================
       // UI RENDER
       // ==========================================
 
@@ -910,7 +976,7 @@
               <button onClick={() => setActiveTab('simulasi')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'simulasi' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
                 <i className="fas fa-chart-pie"></i> 4. Simulasi Bisnis
               </button>
-              <button onClick={() => setActiveTab('katalog')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'katalog' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}>
+              <button onClick={() => setActiveTab('katalog')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'katalog' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
                 <i className="fas fa-search"></i> 5. Katalog Menu
               </button>
               <button onClick={() => setActiveTab('inventory')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'inventory' ? 'bg-orange-600 text-white shadow-md' : 'text-slate-500 hover:bg-orange-50 hover:text-orange-600'}`}>
@@ -1209,47 +1275,159 @@
                       <div className="grid grid-cols-1 xl:grid-cols-2 bg-white">
                         {/* Kiri: HPP */}
                         <div className="p-5 xl:border-r border-slate-200">
-                          <h4 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
+                          <h4 className="font-bold text-slate-700 mb-3 flex flex-wrap items-center gap-2">
                             <i className="fas fa-shopping-cart"></i> Komposisi Bahan (HPP)
-                            <span className="text-[9px] font-bold bg-slate-100 text-slate-400 px-2 py-1 rounded ml-auto border border-slate-200">
-                              <i className="fas fa-info-circle mr-1"></i> Harga Rata-Rata (2 Bln Terakhir)
-                            </span>
+                            <button onClick={() => setShowKitchenConfig(!showKitchenConfig)} className={`text-[10px] font-bold px-2 py-1 rounded ml-auto border transition-colors ${showKitchenConfig ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
+                              <i className={`fas fa-eye${showKitchenConfig ? '' : '-slash'} mr-1`}></i> Mode Dapur (Berat Bersih & Takaran)
+                            </button>
                           </h4>
-                          <table className="w-full text-sm mb-4">
-                            <tbody className="divide-y divide-slate-100">
-                              {recipe.ingredients.map(ing => {
-                                const priceData = getAveragePrice(ing.itemName);
-                                return (
-                                  <tr key={ing.id} className="group hover:bg-slate-50 transition-colors">
-                                    <td className="py-2 font-medium px-2">{ing.itemName}</td>
-                                    <td className="py-2 text-right px-2 whitespace-nowrap">
-                                      <input
-                                        type="text"
-                                        inputMode="decimal"
-                                        className="w-16 p-1 border border-slate-200 rounded text-center text-sm outline-none focus:border-emerald-500"
-                                        value={ing.quantity}
-                                        onChange={(e) => handleEditIngredientQty(recipe.id, ing.id, formatQtyInput(e.target.value))}
-                                        onBlur={() => handleSaveRecipe(recipe.id)}
-                                      />
-                                      <span className="ml-1 text-xs font-bold text-slate-500 uppercase">{uniqueItems.find(u => u.name === ing.itemName)?.unit || '-'}</span>
-                                    </td>
-                                    <td className="py-2 text-right font-bold text-slate-700 px-2">{formatRp(priceData.price * parseNumberInput(ing.quantity))}</td>
-                                    <td className="py-2 text-right px-2">
-                                      <button onClick={() => handleDeleteIngredient(recipe.id, ing.id)} className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-2">
-                                        <i className="fas fa-trash-alt"></i>
-                                      </button>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                            <tfoot>
-                              <tr className="bg-slate-50">
-                                <td colSpan="2" className="py-3 px-2 font-bold text-slate-700">Total HPP Bahan / Porsi:</td>
-                                <td colSpan="2" className="py-3 px-2 text-right font-black text-lg text-rose-600">{formatRp(hppBahan)}</td>
-                              </tr>
-                            </tfoot>
-                          </table>
+                          <div className="w-full overflow-x-auto mb-4">
+                            <table className="w-full text-sm">
+                              <thead className="text-[10px] font-bold text-slate-400 uppercase text-left bg-slate-50 border-b border-slate-200">
+                                <tr>
+                                  <th className="px-2 py-2">Bahan</th>
+                                  <th className="px-2 py-2 text-right">Berat Kotor (Costing)</th>
+                                  {showKitchenConfig && <th className="px-2 py-2 text-right bg-emerald-50/50">Berat Bersih</th>}
+                                  {showKitchenConfig && <th className="px-2 py-2 text-left bg-emerald-50/50">Takaran Manual</th>}
+                                  <th className="px-2 py-2 text-right">Total HPP</th>
+                                  <th className="px-2 py-2"></th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {(() => {
+                                  const categoryOrder = ['MAIN INGREDIENTS', 'CONDIMENTS', 'SEASONING', 'BATTER MIX', 'OTHERS'];
+                                  const initialGroups = categoryOrder.reduce((acc, cat) => ({ ...acc, [cat]: [] }), {});
+                                  
+                                  const groupedIngredients = recipe.ingredients.reduce((acc, ing) => {
+                                    const cat = (ing.category || 'OTHERS').toUpperCase();
+                                    if (!acc[cat]) acc[cat] = [];
+                                    acc[cat].push(ing);
+                                    return acc;
+                                  }, initialGroups);
+                                  
+                                  const sortedCategories = Object.keys(groupedIngredients).sort((a, b) => {
+                                    let idxA = categoryOrder.indexOf(a);
+                                    let idxB = categoryOrder.indexOf(b);
+                                    if (idxA === -1) idxA = 99;
+                                    if (idxB === -1) idxB = 99;
+                                    if (idxA !== idxB) return idxA - idxB;
+                                    return a.localeCompare(b);
+                                  });
+
+                                  return sortedCategories.map(cat => (
+                                    <React.Fragment key={cat}>
+                                      <tr 
+                                        className="bg-slate-100/50 transition-colors"
+                                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                                        onDrop={(e) => handleDropOnCategory(e, recipe.id, cat)}
+                                      >
+                                        <td colSpan={showKitchenConfig ? "6" : "4"} className="py-2 px-3 font-black text-[10px] text-slate-500 uppercase tracking-widest bg-slate-100/80 border-y border-slate-200">
+                                          <div className="flex items-center gap-2">
+                                            <i className="fas fa-folder-open text-emerald-500"></i> {cat}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                      {groupedIngredients[cat].length === 0 && (
+                                        <tr 
+                                          onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                                          onDrop={(e) => handleDropOnCategory(e, recipe.id, cat)}
+                                        >
+                                          <td colSpan={showKitchenConfig ? "6" : "4"} className="py-4 text-center text-xs text-slate-400 border border-dashed border-slate-200 bg-slate-50/30">
+                                            Tarik bahan ke sini
+                                          </td>
+                                        </tr>
+                                      )}
+                                      {groupedIngredients[cat].map(ing => {
+                                        const priceData = getAveragePrice(ing.itemName);
+                                        return (
+                                          <tr 
+                                            key={ing.id} 
+                                            className="group hover:bg-emerald-50/30 transition-colors bg-white relative"
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, recipe.id, ing.id, cat)}
+                                            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                                            onDrop={(e) => handleDropOnIngredient(e, recipe.id, ing.id, cat)}
+                                          >
+                                            <td className="py-2 font-medium px-2 whitespace-nowrap flex items-center gap-2">
+                                              <i className="fas fa-grip-vertical text-slate-300 group-hover:text-emerald-500 cursor-grab active:cursor-grabbing px-1" title="Tarik untuk memindahkan"></i>
+                                              {ing.itemName}
+                                            </td>
+                                            <td className="py-2 text-right px-2 whitespace-nowrap">
+                                              <input
+                                                type="text"
+                                                inputMode="decimal"
+                                                className="w-16 p-1 border border-slate-200 rounded text-center text-sm outline-none focus:border-emerald-500"
+                                                value={ing.quantity}
+                                                onChange={(e) => handleEditIngredientQty(recipe.id, ing.id, formatQtyInput(e.target.value))}
+                                                onBlur={() => handleSaveRecipe(recipe.id)}
+                                              />
+                                              <span className="ml-1 text-xs font-bold text-slate-500 uppercase">{uniqueItems.find(u => u.name === ing.itemName)?.unit || '-'}</span>
+                                            </td>
+                                            {showKitchenConfig && (
+                                              <td className="py-2 text-right px-2 whitespace-nowrap bg-emerald-50/30">
+                                                <input
+                                                  type="text"
+                                                  inputMode="decimal"
+                                                  placeholder="Net Qty"
+                                                  className="w-16 p-1 border border-emerald-200 rounded text-center text-sm outline-none focus:border-emerald-500 bg-white"
+                                                  value={ing.netQty || ''}
+                                                  onChange={(e) => {
+                                                    const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, ingredients: r.ingredients.map(i => i.id === ing.id ? { ...i, netQty: formatQtyInput(e.target.value) } : i) } : r);
+                                                    setRecipes(newRecipes);
+                                                  }}
+                                                  onBlur={() => handleSaveRecipe(recipe.id)}
+                                                />
+                                              </td>
+                                            )}
+                                            {showKitchenConfig && (
+                                              <td className="py-2 px-2 whitespace-nowrap bg-emerald-50/30">
+                                                <div className="flex flex-col gap-1">
+                                                  <input
+                                                    type="text"
+                                                    placeholder="Cth: 1 sdm"
+                                                    className="w-24 p-1 border border-emerald-200 rounded text-sm outline-none focus:border-emerald-500 bg-white"
+                                                    value={ing.measure || ''}
+                                                    onChange={(e) => {
+                                                      const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, ingredients: r.ingredients.map(i => i.id === ing.id ? { ...i, measure: e.target.value } : i) } : r);
+                                                      setRecipes(newRecipes);
+                                                    }}
+                                                    onBlur={() => handleSaveRecipe(recipe.id)}
+                                                  />
+                                                  <input
+                                                    type="text"
+                                                    placeholder="Cth: CONDIMENTS"
+                                                    className="w-24 p-1 border border-emerald-200 rounded text-xs outline-none focus:border-emerald-500 bg-slate-50 uppercase"
+                                                    value={ing.category || ''}
+                                                    onChange={(e) => {
+                                                      const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, ingredients: r.ingredients.map(i => i.id === ing.id ? { ...i, category: e.target.value.toUpperCase() } : i) } : r);
+                                                      setRecipes(newRecipes);
+                                                    }}
+                                                    onBlur={() => handleSaveRecipe(recipe.id)}
+                                                  />
+                                                </div>
+                                              </td>
+                                            )}
+                                            <td className="py-2 text-right font-bold text-slate-700 px-2">{formatRp(priceData.price * parseNumberInput(ing.quantity))}</td>
+                                            <td className="py-2 text-right px-2">
+                                              <button onClick={() => handleDeleteIngredient(recipe.id, ing.id)} className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-2">
+                                                <i className="fas fa-trash-alt"></i>
+                                              </button>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </React.Fragment>
+                                  ));
+                                })()}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-slate-50 border-t border-slate-200">
+                                  <td colSpan={showKitchenConfig ? "4" : "2"} className="py-3 px-2 font-bold text-slate-700">Total HPP Bahan / Porsi:</td>
+                                  <td colSpan="2" className="py-3 px-2 text-right font-black text-lg text-rose-600">{formatRp(hppBahan)}</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
 
                           {selectedRecipeId === recipe.id ? (
                             <form onSubmit={(e) => handleAddIngredient(recipe.id, e)} className="flex gap-2 p-3 bg-slate-50 rounded-xl">
@@ -1423,6 +1601,142 @@
                               </div>
                               <p className="text-xs text-slate-500 mt-2">({formatNum(bepPorsi)} porsi x {formatRp(profitPerPorsi)} = {formatRp(bepPorsi * profitPerPorsi)})</p>
                             </div>
+
+                            <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 mt-4">
+                              <p className="text-sm font-semibold text-amber-400 mb-3 flex items-center justify-between">
+                                <span className="flex items-center gap-2"><i className="fas fa-list-ol"></i> Instruksi Memasak (Recipe Card)</span>
+                              </p>
+                              {(() => {
+                                const isObj = typeof recipe.instructions === 'object' && recipe.instructions !== null;
+                                if (!isObj) {
+                                  return (
+                                    <div>
+                                      <textarea
+                                        className="w-full bg-slate-800 text-white p-3 rounded-lg border border-slate-600 outline-none focus:border-emerald-500 font-medium text-sm min-h-[120px] mb-3"
+                                        placeholder="1. Siapkan bahan..."
+                                        value={recipe.instructions || ''}
+                                        onChange={e => {
+                                          const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, instructions: e.target.value } : r);
+                                          setRecipes(newRecipes);
+                                        }}
+                                        onBlur={(e) => handleSaveRecipe(recipe.id, { ...recipe, instructions: e.target.value })}
+                                      ></textarea>
+                                      <button onClick={() => {
+                                        const newInst = { prepTime: '', cookTime: '', tools: '', chefNote: '', phases: [{ phase: 'STEP 1', steps: [{ process: recipe.instructions || '', temp: '', time: '', notes: '' }] }] };
+                                        const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, instructions: newInst } : r);
+                                        setRecipes(newRecipes);
+                                        handleSaveRecipe(recipe.id, { ...recipe, instructions: newInst });
+                                      }} className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg transition-colors w-full flex items-center justify-center gap-2">
+                                        <i className="fas fa-magic"></i> Ubah ke Format Kartu Resep Profesional
+                                      </button>
+                                    </div>
+                                  );
+                                }
+                                
+                                const inst = recipe.instructions;
+                                const updateInst = (updates) => {
+                                  const newInst = { ...inst, ...updates };
+                                  const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, instructions: newInst } : r);
+                                  setRecipes(newRecipes);
+                                };
+                                
+                                return (
+                                  <div className="space-y-4">
+                                    <div className="grid grid-cols-3 gap-2">
+                                      <div>
+                                        <label className="text-[10px] text-slate-400 uppercase font-bold">Prep Time</label>
+                                        <input type="text" className="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none focus:border-emerald-500" value={inst.prepTime || ''} onChange={e => updateInst({ prepTime: e.target.value })} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="2 Min" />
+                                      </div>
+                                      <div>
+                                        <label className="text-[10px] text-slate-400 uppercase font-bold">Cook Time</label>
+                                        <input type="text" className="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none focus:border-emerald-500" value={inst.cookTime || ''} onChange={e => updateInst({ cookTime: e.target.value })} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="6 Min" />
+                                      </div>
+                                      <div>
+                                        <label className="text-[10px] text-slate-400 uppercase font-bold">Tools</label>
+                                        <input type="text" className="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none focus:border-emerald-500" value={inst.tools || ''} onChange={e => updateInst({ tools: e.target.value })} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="Wok, Deep Frying" />
+                                      </div>
+                                    </div>
+                                    
+                                    <div className="space-y-3">
+                                      {(inst.phases || []).map((phase, pIdx) => (
+                                        <div key={pIdx} className="border border-slate-700 rounded-lg p-2 bg-slate-800/50">
+                                          <div className="flex gap-2 mb-2">
+                                            <input type="text" className="flex-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-amber-400 font-bold uppercase outline-none focus:border-amber-500" value={phase.phase} onChange={e => {
+                                              const newPhases = [...inst.phases];
+                                              newPhases[pIdx].phase = e.target.value;
+                                              updateInst({ phases: newPhases });
+                                            }} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="NAMA FASE (Cth: STEP 1: MENGGORENG IKAN)" />
+                                            <button onClick={() => {
+                                              const newPhases = inst.phases.filter((_, i) => i !== pIdx);
+                                              updateInst({ phases: newPhases });
+                                              handleSaveRecipe(recipe.id, { ...recipe, instructions: { ...inst, phases: newPhases } });
+                                            }} className="text-red-400 p-1.5 hover:bg-red-500/20 rounded transition-colors" title="Hapus Fase"><i className="fas fa-trash"></i></button>
+                                          </div>
+                                          
+                                          <div className="overflow-x-auto">
+                                            <table className="w-full text-xs text-left min-w-[400px]">
+                                              <thead>
+                                                <tr className="text-slate-400 border-b border-slate-700">
+                                                  <th className="pb-1 font-semibold">Process</th>
+                                                  <th className="pb-1 w-16 font-semibold text-center">Temp</th>
+                                                  <th className="pb-1 w-16 font-semibold text-center">Time</th>
+                                                  <th className="pb-1 font-semibold">Notes</th>
+                                                  <th className="pb-1 w-6"></th>
+                                                </tr>
+                                              </thead>
+                                              <tbody className="divide-y divide-slate-700/50">
+                                                {(phase.steps || []).map((step, sIdx) => (
+                                                  <tr key={sIdx}>
+                                                    <td className="py-1 pr-1"><input type="text" className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-white outline-none focus:border-emerald-500" value={step.process} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].process = e.target.value; updateInst({ phases: newP }); }} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="Marinasi ikan..." /></td>
+                                                    <td className="py-1 pr-1"><input type="text" className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-white text-center outline-none focus:border-emerald-500" value={step.temp} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].temp = e.target.value; updateInst({ phases: newP }); }} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="170°C" /></td>
+                                                    <td className="py-1 pr-1"><input type="text" className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-white text-center outline-none focus:border-emerald-500" value={step.time} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].time = e.target.value; updateInst({ phases: newP }); }} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="4 min" /></td>
+                                                    <td className="py-1 pr-1"><input type="text" className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-white outline-none focus:border-emerald-500" value={step.notes} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].notes = e.target.value; updateInst({ phases: newP }); }} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="Hingga slightly golden..." /></td>
+                                                    <td className="py-1 text-center">
+                                                      <button onClick={() => {
+                                                        const newP = [...inst.phases]; newP[pIdx].steps.splice(sIdx, 1); updateInst({ phases: newP }); handleSaveRecipe(recipe.id, { ...recipe, instructions: { ...inst, phases: newP } });
+                                                      }} className="text-slate-500 hover:text-red-400 p-1"><i className="fas fa-times"></i></button>
+                                                    </td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                          <button onClick={() => {
+                                            const newP = [...inst.phases];
+                                            if(!newP[pIdx].steps) newP[pIdx].steps = [];
+                                            newP[pIdx].steps.push({ process: '', temp: '', time: '', notes: '' });
+                                            updateInst({ phases: newP });
+                                            handleSaveRecipe(recipe.id, { ...recipe, instructions: { ...inst, phases: newP } });
+                                          }} className="mt-2 text-[10px] text-emerald-400 hover:text-emerald-300 font-bold bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1 rounded transition-colors"><i className="fas fa-plus mr-1"></i> Tambah Baris Proses</button>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    
+                                    <button onClick={() => {
+                                      const newP = [...(inst.phases || []), { phase: `STEP ${(inst.phases || []).length + 1}`, steps: [{ process: '', temp: '', time: '', notes: '' }] }];
+                                      updateInst({ phases: newP });
+                                      handleSaveRecipe(recipe.id, { ...recipe, instructions: { ...inst, phases: newP } });
+                                    }} className="w-full border-2 border-dashed border-slate-600 text-slate-400 hover:text-white hover:border-slate-500 hover:bg-slate-800 p-2.5 rounded-lg text-xs font-bold transition-all">
+                                      <i className="fas fa-plus-circle mr-1"></i> Tambah Fase Baru
+                                    </button>
+                                    
+                                    <div>
+                                      <label className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1 mb-1"><i className="fas fa-sticky-note"></i> Chef Note</label>
+                                      <textarea className="w-full bg-slate-800 border border-slate-600 rounded-lg p-2.5 text-sm text-white min-h-[60px] outline-none focus:border-emerald-500" value={inst.chefNote || ''} onChange={e => updateInst({ chefNote: e.target.value })} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="Catatan khusus dari chef... (Cth: Goreng ikan dalam keadaan benar-benar thawing...)"></textarea>
+                                    </div>
+                                    <button onClick={() => {
+                                      // Switch back to text mode (Optional, maybe not needed, but good for safety)
+                                      if(confirm('Ubah kembali ke mode teks biasa? Format tabel akan hilang.')){
+                                        const text = inst.phases?.map(p => p.phase + ':\n' + p.steps?.map(s => `- ${s.process} (${s.time})`).join('\n')).join('\n\n');
+                                        const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, instructions: text } : r);
+                                        setRecipes(newRecipes);
+                                        handleSaveRecipe(recipe.id, { ...recipe, instructions: text });
+                                      }
+                                    }} className="text-[10px] text-slate-500 hover:text-slate-300 underline mt-2 block text-center w-full">Kembali ke Format Teks Biasa</button>
+                                  </div>
+                                );
+                              })()}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1571,7 +1885,7 @@
                     </div>
                     <input
                       type="text"
-                      className="w-full pl-11 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none focus:border-indigo-500 font-medium text-lg transition-colors"
+                      className="w-full pl-11 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 font-medium text-lg transition-colors"
                       placeholder="Cari nama menu..."
                       value={searchKatalog}
                       onChange={(e) => setSearchKatalog(e.target.value)}
@@ -1595,12 +1909,12 @@
                             </div>
                           )}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                            <span className="text-white font-bold text-sm bg-indigo-600 px-3 py-1 rounded-full"><i className="fas fa-eye mr-1"></i> Lihat Rincian</span>
+                            <span className="text-white font-bold text-sm bg-emerald-600 px-3 py-1 rounded-full"><i className="fas fa-eye mr-1"></i> Lihat Rincian</span>
                           </div>
                         </div>
                         <div className="p-5 flex flex-col h-full">
                           <h3 className="font-black text-lg text-slate-800 mb-2 line-clamp-2 leading-tight">{recipe.menuName}</h3>
-                          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 mb-4 w-max" title="Berdasarkan sisa stok inventori">
+                          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100 mb-4 w-max" title="Berdasarkan sisa stok inventori">
                             <i className="fas fa-boxes"></i> Bisa dibuat: {calculateMaxPortions(recipe.id)} {recipe.yieldUnit}
                           </div>
                           <div className="flex justify-between items-center pt-4 border-t border-slate-100">
@@ -1659,7 +1973,7 @@
                           <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
                             <i className="fas fa-check-circle"></i> Resep untuk {formatNum(recipe.yieldQty)} {recipe.yieldUnit}
                           </div>
-                          <div className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-200" title="Berdasarkan stok bahan baku yang tersisa di inventori saat ini">
+                          <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200" title="Berdasarkan stok bahan baku yang tersisa di inventori saat ini">
                             <i className="fas fa-boxes"></i> Bisa dibuat: {calculateMaxPortions(recipe.id)} {recipe.yieldUnit}
                           </div>
                         </div>
@@ -1687,7 +2001,7 @@
                         </div>
 
                         <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
-                          <i className="fas fa-list-ul text-indigo-500"></i> Komposisi Resep
+                          <i className="fas fa-list-ul text-emerald-500"></i> Komposisi Resep
                         </h3>
                         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
                           <ul className="space-y-3">
@@ -1707,9 +2021,9 @@
                         </div>
 
                         <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
-                          <i className="fas fa-microscope text-indigo-500"></i> Status Bahan Mentah
+                          <i className="fas fa-microscope text-emerald-500"></i> Status Bahan Mentah
                         </h3>
-                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex-1">
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
                           {(() => {
                             const flatIngredients = getFlatRequiredIngredients(recipe.id);
                             if (flatIngredients.size === 0) return <p className="text-center text-slate-400 italic text-sm py-4">Belum ada data bahan baku</p>;
@@ -1747,6 +2061,17 @@
                             );
                           })()}
                         </div>
+
+                        {recipe.instructions && (
+                          <>
+                            <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2">
+                              <i className="fas fa-list-ol text-emerald-500"></i> Cara Memasak
+                            </h3>
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 whitespace-pre-line text-sm text-slate-700 leading-relaxed mb-6">
+                              {recipe.instructions}
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1822,7 +2147,7 @@
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 print-area">
                   <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b pb-4">
                     <h2 className="text-lg font-bold flex items-center gap-2">
-                      <i className="fas fa-boxes text-lg text-indigo-600"></i> Laporan Inventori
+                      <i className="fas fa-boxes text-lg text-emerald-600"></i> Laporan Inventori
                     </h2>
                     <div className="flex flex-wrap items-center gap-3 w-full md:w-auto print-hide">
                       <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
@@ -1853,7 +2178,7 @@
                           <th className="p-3 text-center text-blue-300">Masuk (Beli)</th>
                           <th className="p-3 text-center text-emerald-300">Keluar (Resep)</th>
                           <th className="p-3 text-center text-orange-300">Keluar (Buang)</th>
-                          <th className="p-3 text-center rounded-r-lg bg-indigo-900 font-black text-white">Stok Akhir</th>
+                          <th className="p-3 text-center rounded-r-lg bg-emerald-900 font-black text-white">Stok Akhir</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -1873,7 +2198,7 @@
                             <td className="p-3 text-center text-blue-600 font-medium">{formatNum(item.masuk)}</td>
                             <td className="p-3 text-center text-emerald-600 font-medium">{formatNum(item.keluarSales)}</td>
                             <td className="p-3 text-center text-orange-600 font-medium">{formatNum(item.keluarAdjustments)}</td>
-                            <td className={`p-3 text-center font-black ${item.stokAkhir < 0 ? 'text-red-500 bg-red-50' : 'text-slate-800 bg-indigo-50/30'}`}>{formatNum(item.stokAkhir)}</td>
+                            <td className={`p-3 text-center font-black ${item.stokAkhir < 0 ? 'text-red-500 bg-red-50' : 'text-slate-800 bg-emerald-50/30'}`}>{formatNum(item.stokAkhir)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1951,8 +2276,8 @@
                           <tfoot className="bg-slate-50 font-bold border-t-2 border-slate-200">
                             <tr>
                               <td className="p-3 text-right">TOTAL</td>
-                              <td className="p-3 text-right text-indigo-600">{formatNum(selectedPriceDetailItem.priceDetails.totalQty)} {selectedPriceDetailItem.unit}</td>
-                              <td className="p-3 text-right text-indigo-600">Rp {formatNum(selectedPriceDetailItem.priceDetails.totalCost)}</td>
+                              <td className="p-3 text-right text-emerald-600">{formatNum(selectedPriceDetailItem.priceDetails.totalQty)} {selectedPriceDetailItem.unit}</td>
+                              <td className="p-3 text-right text-emerald-600">Rp {formatNum(selectedPriceDetailItem.priceDetails.totalCost)}</td>
                             </tr>
                           </tfoot>
                         </table>

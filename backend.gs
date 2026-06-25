@@ -171,9 +171,18 @@ function doGet(e) {
           });
         }
         
+        let instructions = '';
+        let netWeights = {};
         // Baca Bahan dari Kolom H dst (index 7, 8, 9, 10, 11, 12...)
         for (let j = 7; j < row.length; j += 3) {
-          if (row[j] && String(row[j]).trim() !== '') {
+          if (row[j] === 'META_INSTRUCTIONS') {
+            instructions = row[j+1] || '';
+            if (typeof instructions === 'string' && instructions.trim().startsWith('{')) {
+              try { instructions = JSON.parse(instructions); } catch(e) {}
+            }
+          } else if (row[j] === 'META_NET_WEIGHTS') {
+            try { netWeights = JSON.parse(row[j+1]); } catch(e) {}
+          } else if (row[j] && String(row[j]).trim() !== '') {
             ingredients.push({
               id: new Date().getTime() + j, // ID sementara untuk UI React
               itemName: row[j],
@@ -183,12 +192,22 @@ function doGet(e) {
           }
         }
         
+        ingredients = ingredients.map(ing => {
+          if (netWeights && netWeights[ing.itemName]) {
+            ing.netQty = netWeights[ing.itemName].netQty;
+            ing.measure = netWeights[ing.itemName].measure;
+            ing.category = netWeights[ing.itemName].category;
+          }
+          return ing;
+        });
+        
         recipes.push({
           id: row[0],
           menuName: row[1],
           targetMarginPercent: Number(row[2]),
           imageUrl: row[3] || '',
-          ingredients: ingredients
+          ingredients: ingredients,
+          instructions: instructions
         });
       }
     }
@@ -229,6 +248,67 @@ function doPost(e) {
     const payload = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
+    // Public Endpoints (No Auth Required)
+    if (payload.action === 'getPublicRecipes') {
+      let publicRecipes = [];
+      const recipeSheet = ss.getSheetByName(SHEET_RECIPES);
+      if (recipeSheet) {
+        const recipeData = recipeSheet.getDataRange().getValues();
+        for (let i = 1; i < recipeData.length; i++) {
+          const row = recipeData[i];
+          if (!row[0] || String(row[3]).trim().startsWith('[')) continue;
+          
+          let ingredients = [];
+          if (row[4] !== undefined && row[4] !== '') {
+            ingredients.push({
+              id: 'META_YIELD',
+              qty: row[4],
+              unit: row[5] || 'porsi',
+              type: row[6] || 'final'
+            });
+          }
+          
+          let instructions = '';
+          let netWeights = {};
+          for (let j = 7; j < row.length; j += 3) {
+            if (row[j] === 'META_INSTRUCTIONS') {
+              instructions = row[j+1] || '';
+              if (typeof instructions === 'string' && instructions.trim().startsWith('{')) {
+                try { instructions = JSON.parse(instructions); } catch(e) {}
+              }
+            } else if (row[j] === 'META_NET_WEIGHTS') {
+              try { netWeights = JSON.parse(row[j+1]); } catch(e) {}
+            } else if (row[j] && String(row[j]).trim() !== '') {
+              ingredients.push({
+                id: new Date().getTime() + j,
+                itemName: row[j],
+                quantity: row[j+1],
+                unit: row[j+2] || ''
+              });
+            }
+          }
+          
+          ingredients = ingredients.map(ing => {
+            if (netWeights && netWeights[ing.itemName]) {
+              ing.netQty = netWeights[ing.itemName].netQty;
+              ing.measure = netWeights[ing.itemName].measure;
+              ing.category = netWeights[ing.itemName].category;
+            }
+            return ing;
+          });
+          
+          publicRecipes.push({
+            id: row[0],
+            menuName: row[1],
+            imageUrl: row[3] || '',
+            ingredients: ingredients,
+            instructions: instructions
+          });
+        }
+      }
+      return createJsonResponse({ status: 'success', data: { recipes: publicRecipes } });
+    }
+
     // Auth Check
     const password = payload.password;
     if (!verifyPassword(ss, password)) {
@@ -406,11 +486,36 @@ function addRecipeRowData(data) {
   row.push(yieldMeta.type || 'final');
   
   // 2. Extract real ingredients dynamically into remaining columns
-  const realIngs = ings.filter(i => i.id !== 'META_YIELD');
+  const realIngs = ings.filter(i => i.id !== 'META_YIELD' && i.id !== 'META_INSTRUCTIONS');
   for (let i = 0; i < realIngs.length; i++) {
     row.push(realIngs[i].itemName);
     row.push(realIngs[i].quantity !== undefined ? realIngs[i].quantity : (realIngs[i].qty || 0));
     row.push(realIngs[i].unit || '');
+  }
+  
+  // 3. Append META_INSTRUCTIONS
+  const instructionMeta = ings.find(i => i.id === 'META_INSTRUCTIONS');
+  if (instructionMeta || data.instructions) {
+    row.push('META_INSTRUCTIONS');
+    let instructionsData = instructionMeta ? instructionMeta.instructions : (data.instructions || '');
+    if (typeof instructionsData === 'object') {
+      instructionsData = JSON.stringify(instructionsData);
+    }
+    row.push(instructionsData);
+    row.push('');
+  }
+  
+  // 4. Append META_NET_WEIGHTS
+  let netWeightsObj = {};
+  realIngs.forEach(ing => {
+    if (ing.netQty !== undefined || ing.measure !== undefined || ing.category !== undefined) {
+      netWeightsObj[ing.itemName] = { netQty: ing.netQty, measure: ing.measure, category: ing.category };
+    }
+  });
+  if (Object.keys(netWeightsObj).length > 0) {
+    row.push('META_NET_WEIGHTS');
+    row.push(JSON.stringify(netWeightsObj));
+    row.push('');
   }
   
   return row;

@@ -55,9 +55,22 @@ Ini adalah jantung dari aplikasi. Di sini Anda meracik menu.
    - Masukkan komposisi bawang, cabai, minyak, dll.
    - Sistem akan menghitung HPP Bumbu per gram-nya! Bumbu ini kemudian bisa Anda panggil ke resep *Menu Akhir* layaknya bahan baku biasa.
 
-3. **⭐ Aturan Emas Penyusutan (Yield / Gross vs Net Weight) ⭐**
-   - Saat membuat resep, pastikan berat yang dimasukkan adalah **Berat Kotor (Gross Weight)**. Yaitu berat bahan saat dikeluarkan dari kulkas/gudang, bukan saat tersaji.
-   - Contoh: Untuk menyajikan 200gr dada ayam bersih, Anda mungkin harus mengambil 220gr ayam dari freezer (20gr terbuang sebagai lemak/air thaw). Tuliskan **220 gram** di resep! Ini agar perhitungan laba Anda akurat, dan inventori fisik Anda di kulkas cocok dengan di aplikasi.
+3. **Mode Dapur & Berat Bersih (Khusus Koki):**
+   - Saat memasukkan bahan, Anda akan memasukkan Berat Kotor (*Gross*) untuk perhitungan HPP. Namun, untuk koki, Anda mungkin perlu menuliskan takaran visual atau berat bersih.
+   - Klik tombol **"Mode Dapur (Berat Bersih & Takaran)"** di atas tabel bahan.
+   - Akan muncul kolom **Berat Bersih**, **Takaran Manual** (Cth: *1 sdm*, *2 siung*), dan **Kategori** (Cth: *MAIN INGREDIENTS*, *SEASONING*). Isi kolom ini agar koki tidak kebingungan.
+   - Data ini **hanya akan muncul** di halaman Katalog Dapur (`cook.html`) dan tidak merusak HPP Anda!
+
+4. **Kartu Resep Profesional (Recipe Builder):**
+   - Pada kotak "Cara Memasak", klik tombol ungu **"Ubah ke Format Kartu Resep Profesional"**.
+   - Ini akan mengubah kolom teks biasa menjadi sistem pembuat resep canggih (*Builder*).
+   - Isi *Prep Time*, *Cook Time*, dan *Tools*.
+   - Buat fase-fase memasak (Cth: *STEP 1: PERSIAPAN*, *STEP 2: MENGGORENG*) dan tambahkan langkah-langkah detail beserta suhu dan waktunya.
+   - Format ini akan disajikan kepada koki layaknya standar **Professional Recipe Card** di jaringan hotel internasional.
+
+5. **⭐ Aturan Emas Penyusutan (Yield / Gross vs Net Weight) ⭐**
+   - Saat membuat resep, pastikan berat yang dimasukkan di kolom Harga/Kuantitas utama adalah **Berat Kotor (Gross Weight)**. Yaitu berat bahan saat dikeluarkan dari kulkas/gudang, bukan saat tersaji.
+   - Contoh: Untuk menyajikan 200gr dada ayam bersih, Anda mungkin harus mengambil 220gr ayam dari freezer (20gr terbuang sebagai lemak/air thaw). Tuliskan **220 gram** di resep Costing! Ini agar perhitungan laba Anda akurat, dan inventori fisik Anda di kulkas cocok dengan di aplikasi.
 
 ---
 
