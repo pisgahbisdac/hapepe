@@ -306,7 +306,62 @@ function doPost(e) {
           });
         }
       }
-      return createJsonResponse({ status: 'success', data: { recipes: publicRecipes } });
+      let purchases = [];
+      const purchasesSheet = ss.getSheetByName(SHEET_PURCHASES);
+      if (purchasesSheet) {
+        const pData = purchasesSheet.getDataRange().getValues();
+        for (let i = 1; i < pData.length; i++) {
+          if (!pData[i][0]) continue;
+          purchases.push({
+            id: pData[i][0],
+            date: pData[i][1],
+            itemName: pData[i][2],
+            unit: pData[i][3],
+            quantity: Number(pData[i][4])
+            // Do NOT expose totalPrice for public endpoint
+          });
+        }
+      }
+
+      let sales = [];
+      const salesSheet = ss.getSheetByName(SHEET_SALES);
+      if (salesSheet) {
+        const sData = salesSheet.getDataRange().getValues();
+        for (let i = 1; i < sData.length; i++) {
+          if (!sData[i][0]) continue;
+          sales.push({
+            id: sData[i][0],
+            date: sData[i][1],
+            recipeId: sData[i][2],
+            quantitySold: Number(sData[i][3])
+          });
+        }
+      }
+
+      let adjustments = [];
+      const adjSheet = ss.getSheetByName(SHEET_ADJUSTMENTS);
+      if (adjSheet) {
+        const aData = adjSheet.getDataRange().getValues();
+        for (let i = 1; i < aData.length; i++) {
+          if (!aData[i][0]) continue;
+          adjustments.push({
+            id: aData[i][0],
+            date: aData[i][1],
+            itemName: aData[i][2],
+            quantity: Number(aData[i][3])
+          });
+        }
+      }
+
+      return createJsonResponse({ 
+        status: 'success', 
+        data: { 
+          recipes: publicRecipes,
+          purchases: purchases,
+          sales: sales,
+          adjustments: adjustments
+        } 
+      });
     }
 
     // Auth Check
