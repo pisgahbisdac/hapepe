@@ -90,6 +90,15 @@
         display: none !important;
       }
 
+      /* Print styles for inputs */
+      input, textarea {
+        border: none !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        color: black !important;
+        resize: none !important;
+      }
       /* Ensure colors print correctly */
       * {
         -webkit-print-color-adjust: exact !important;
@@ -507,7 +516,11 @@
           const bucket = getBucket(sale.date);
           if (bucket === 'future') return;
 
-          const recipe = recipes.find(r => String(r.id) === String(sale.recipeId));
+          const recipe = recipes.find(r => 
+            String(r.id) === String(sale.recipeId) || 
+            String(r.menuName).toLowerCase() === String(sale.recipeId).toLowerCase() ||
+            String(r.menuName).toLowerCase() === String(sale.menuName).toLowerCase()
+          );
           if (recipe) {
             const qtySold = Number(sale.quantitySold) || 0;
             const deductIngredients = (currentRecipe, multiplier, bucketStr, visited = new Set()) => {
@@ -720,9 +733,19 @@
         const parsedQty = parseNumberInput(newSale.quantitySold);
         if (!newSale.recipeId || parsedQty <= 0) return;
 
-        const recipe = recipes.find(r => String(r.id) === String(newSale.recipeId));
-        const menuName = recipe ? recipe.menuName : '';
-        const saleData = { id: Date.now(), ...newSale, quantitySold: parsedQty, menuName };
+        // newSale.recipeId might contain the menuName from the datalist text input
+        const typedValue = String(newSale.recipeId).toLowerCase();
+        const recipe = recipes.find(r => 
+          String(r.id) === typedValue || 
+          String(r.menuName).toLowerCase() === typedValue
+        );
+        
+        if (!recipe) {
+          alert('Menu tidak ditemukan! Pastikan Anda memilih dari daftar.');
+          return;
+        }
+
+        const saleData = { id: Date.now(), date: newSale.date, recipeId: recipe.id, quantitySold: parsedQty, menuName: recipe.menuName };
         setSales([...sales, saleData]);
         sendApiRequest('addSale', saleData);
         setNewSale({ ...newSale, recipeId: '', quantitySold: '' });
@@ -1651,7 +1674,7 @@
                     const maxPortions = calculateMaxPortions(recipe.id);
 
                     return ReactDOM.createPortal(
-                      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }} className="bg-slate-50 flex flex-col overflow-hidden w-full h-full">
+                      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }} className="bg-slate-50 flex flex-col overflow-hidden w-full h-full print-area">
                         <div className="w-full h-full flex flex-col overflow-hidden">
                           {/* MODAL HEADER */}
                           <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 shrink-0 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sticky top-0 z-10">
@@ -1660,8 +1683,8 @@
                                 <input
                                   type="text"
                                   className="font-black text-xl sm:text-2xl text-slate-800 bg-transparent border border-transparent hover:border-slate-300 focus:border-emerald-500 focus:bg-white outline-none rounded px-2 py-1 w-full transition-colors"
-                                  value={recipe.menuName}
-                                  onChange={(e) => updateDraft({ menuName: e.target.value })}
+                                  defaultValue={recipe.menuName}
+                                  onBlur={(e) => updateDraft({ menuName: e.target.value })}
                                   
                                   title="Klik untuk mengubah nama menu"
                                 />
@@ -1674,7 +1697,7 @@
                                       className="text-xs font-medium text-slate-600 bg-slate-100/80 border border-transparent hover:border-slate-300 focus:border-emerald-500 focus:bg-white outline-none rounded pl-7 pr-2 py-1.5 w-full transition-colors"
                                       placeholder="+ Kategori Menu (opsional)"
                                       defaultValue={recipe.menuCategory || ''}
-                                      onChange={(e) => updateDraft({ menuCategory: e.target.value })}
+                                      onBlur={(e) => updateDraft({ menuCategory: e.target.value })}
                                       onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
                                     />
                                   </div>
@@ -1690,7 +1713,7 @@
                                   </span>
                                   <button
                                     onClick={(e) => { e.preventDefault(); updateDraft({ isActive: recipe.isActive === false ? true : false }); }}
-                                    className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider border transition-colors ${recipe.isActive !== false ? 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-rose-100 hover:text-rose-700 hover:border-rose-200' : 'bg-slate-200 text-slate-500 border-slate-300 hover:bg-emerald-100 hover:text-emerald-700 hover:border-emerald-200'}`}
+                                    className={`print-hide text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider border transition-colors ${recipe.isActive !== false ? 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-rose-100 hover:text-rose-700 hover:border-rose-200' : 'bg-slate-200 text-slate-500 border-slate-300 hover:bg-emerald-100 hover:text-emerald-700 hover:border-emerald-200'}`}
                                     title="Klik untuk mengubah status menu"
                                   >
                                     <i className={`fas fa-${recipe.isActive !== false ? 'check-circle' : 'power-off'} mr-1`}></i> {recipe.isActive !== false ? 'Aktif' : 'Nonaktif'}
@@ -1698,7 +1721,10 @@
                                 </div>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto print-hide">
+                              <button onClick={() => window.print()} className="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 p-2 rounded-lg transition-colors font-bold flex items-center gap-2 px-3">
+                                <i className="fas fa-print"></i> <span className="hidden sm:inline">Cetak PDF</span>
+                              </button>
                               {!isCreatingNewRecipe && (
                                 <button onClick={() => { if (confirm('Hapus menu ini?')) { handleDeleteRecipe(recipe.id); setEditingRecipeData(null); setIsCreatingNewRecipe(false); } }} className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 p-2 rounded-lg transition-colors font-bold flex items-center gap-2">
                                   <i className="fas fa-trash-alt"></i> <span className="hidden sm:inline">Hapus</span>
@@ -1725,7 +1751,7 @@
                               <div className="p-5 xl:border-r border-slate-200">
                                 <h4 className="font-bold text-slate-700 mb-3 flex flex-wrap items-center gap-2">
                                   <i className="fas fa-shopping-cart"></i> Komposisi Bahan (HPP)
-                                  <button onClick={() => setShowKitchenConfig(!showKitchenConfig)} className={`text-[10px] font-bold px-2 py-1 rounded ml-auto border transition-colors ${showKitchenConfig ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
+                                  <button onClick={() => setShowKitchenConfig(!showKitchenConfig)} className={`print-hide text-[10px] font-bold px-2 py-1 rounded ml-auto border transition-colors ${showKitchenConfig ? 'bg-emerald-100 text-emerald-600 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200'}`}>
                                     <i className={`fas fa-eye${showKitchenConfig ? '' : '-slash'} mr-1`}></i> Mode Dapur (Berat Bersih & Takaran)
                                   </button>
                                 </h4>
@@ -1779,13 +1805,14 @@
                                             >
                                               <td colSpan={showKitchenConfig ? "6" : "4"} className="py-2 px-3 font-black text-[10px] text-slate-500 uppercase tracking-widest bg-slate-100/80 border-y border-slate-200">
                                                 <div className="flex items-center gap-2">
-                                                  <i className="fas fa-grip-vertical text-slate-300 group-hover:text-emerald-500 transition-colors"></i>
-                                                  <i className="fas fa-folder-open text-emerald-500"></i> {cat}
+                                                  <i className="fas fa-grip-vertical text-slate-300 group-hover:text-emerald-500 transition-colors print-hide"></i>
+                                                  <i className="fas fa-folder-open text-emerald-500 print-hide"></i> {cat}
                                                 </div>
                                               </td>
                                             </tr>
                                             {groupedIngredients[cat].length === 0 && (
                                               <tr
+                                                className="print-hide"
                                                 onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                                                 onDrop={(e) => handleDropOnCategory(e, recipe.id, cat)}
                                               >
@@ -1807,14 +1834,14 @@
                                                 >
                                                   <td className="py-2 font-medium px-2 whitespace-nowrap">
                                                     <div className="flex items-center gap-1">
-                                                      <i className="fas fa-grip-vertical text-slate-300 group-hover:text-emerald-500 cursor-grab active:cursor-grabbing px-1 shrink-0" title="Tarik untuk memindahkan"></i>
+                                                      <i className="fas fa-grip-vertical text-slate-300 group-hover:text-emerald-500 cursor-grab active:cursor-grabbing px-1 shrink-0 print-hide" title="Tarik untuk memindahkan"></i>
                                                       <div className="flex flex-col gap-1 w-full">
                                                         <input
                                                           type="text"
                                                           list={`ing-list-${recipe.id}-${ing.id}`}
                                                           className="w-full min-w-[100px] p-1 border border-transparent rounded text-sm outline-none hover:border-slate-200 focus:border-emerald-500 focus:bg-white bg-transparent font-medium transition-colors"
-                                                          value={ing.itemName}
-                                                          onChange={(e) => handleEditIngredientField(recipe.id, ing.id, 'itemName', e.target.value)}
+                                                          defaultValue={ing.itemName}
+                                                          onBlur={(e) => handleEditIngredientField(recipe.id, ing.id, 'itemName', e.target.value)}
                                                           
                                                           title="Klik untuk mengedit nama bahan"
                                                         />
@@ -1855,8 +1882,8 @@
                                                       type="text"
                                                       inputMode="decimal"
                                                       className="w-16 p-1 border border-slate-200 rounded text-center text-sm outline-none focus:border-emerald-500"
-                                                      value={ing.quantity}
-                                                      onChange={(e) => handleEditIngredientQty(recipe.id, ing.id, formatQtyInput(e.target.value))}
+                                                      defaultValue={ing.quantity}
+                                                      onBlur={(e) => handleEditIngredientQty(recipe.id, ing.id, formatQtyInput(e.target.value))}
                                                       
                                                     />
                                                     <span className="ml-1 text-xs font-bold text-slate-500 uppercase">{uniqueItems.find(u => u.name === ing.itemName)?.unit || '-'}</span>
@@ -1868,10 +1895,14 @@
                                                         inputMode="decimal"
                                                         placeholder="Net Qty"
                                                         className="w-16 p-1 border border-emerald-200 rounded text-center text-sm outline-none focus:border-emerald-500 bg-white"
-                                                        value={ing.netQty || ''}
-                                                        onChange={(e) => {
-                                                          const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, ingredients: r.ingredients.map(i => i.id === ing.id ? { ...i, netQty: formatQtyInput(e.target.value) } : i) } : r);
+                                                        defaultValue={ing.netQty || ''}
+                                                        onBlur={(e) => {
+                                                          const newNetQty = formatQtyInput(e.target.value);
+                                                          const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, ingredients: r.ingredients.map(i => i.id === ing.id ? { ...i, netQty: newNetQty } : i) } : r);
                                                           setRecipes(newRecipes);
+                                                          if (editingRecipeData && editingRecipeData.id === recipe.id) {
+                                                            setEditingRecipeData({ ...editingRecipeData, ingredients: editingRecipeData.ingredients.map(i => i.id === ing.id ? { ...i, netQty: newNetQty } : i) });
+                                                          }
                                                         }}
                                                         
                                                       />
@@ -1896,7 +1927,7 @@
                                                     </td>
                                                   )}
                                                   <td className="py-2 text-right font-bold text-slate-700 px-2">{formatRp(priceData.price * parseNumberInput(ing.quantity))}</td>
-                                                  <td className="py-2 text-right px-2">
+                                                  <td className="py-2 text-right px-2 print-hide">
                                                     <button onClick={() => handleDeleteIngredient(recipe.id, ing.id)} className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-2">
                                                       <i className="fas fa-trash-alt"></i>
                                                     </button>
@@ -1918,21 +1949,21 @@
                                 </div>
 
                                 {selectedRecipeId === recipe.id ? (
-                                  <form onSubmit={(e) => handleAddIngredient(recipe.id, e)} className="flex gap-2 p-3 bg-slate-50 rounded-xl">
+                                  <form onSubmit={(e) => handleAddIngredient(recipe.id, e)} className="flex gap-2 p-3 bg-slate-50 rounded-xl print-hide">
                                     <input
                                       type="text"
                                       list="recipe-ingredients-list"
                                       placeholder="Ketik/Pilih Bahan..."
                                       className="flex-1 p-2 rounded outline-none border border-slate-200 text-sm focus:border-emerald-500"
-                                      value={newIngredient.itemName}
-                                      onChange={e => setNewIngredient({ ...newIngredient, itemName: e.target.value })}
+                                      defaultValue={newIngredient.itemName}
+                                      onBlur={e => setNewIngredient({ ...newIngredient, itemName: e.target.value })}
                                       required
                                     />
                                     <datalist id="recipe-ingredients-list">
                                       {uniqueItems.map((item, idx) => <option key={idx} value={item.name} />)}
                                     </datalist>
                                     <div className="flex items-center gap-1 bg-white border border-slate-200 rounded pr-2">
-                                      <input type="text" inputMode="decimal" placeholder="Qty" className="w-16 p-2 outline-none text-sm bg-transparent" value={newIngredient.quantity} onChange={e => setNewIngredient({ ...newIngredient, quantity: formatQtyInput(e.target.value) })} required />
+                                      <input type="text" inputMode="decimal" placeholder="Qty" className="w-16 p-2 outline-none text-sm bg-transparent" defaultValue={newIngredient.quantity} onBlur={e => setNewIngredient({ ...newIngredient, quantity: formatQtyInput(e.target.value) })} required />
                                       <span className="text-xs font-bold text-slate-500 uppercase">
                                         {uniqueItems.find(u => u.name.toLowerCase() === (newIngredient.itemName || '').toLowerCase())?.unit || '-'}
                                       </span>
@@ -1940,7 +1971,7 @@
                                     <button type="submit" className="bg-slate-800 text-white px-4 rounded font-bold">OK</button>
                                   </form>
                                 ) : (
-                                  <button onClick={() => setSelectedRecipeId(recipe.id)} className="w-full py-2 border-2 border-dashed border-slate-200 text-slate-500 rounded-xl font-semibold hover:bg-slate-50 transition-colors">
+                                  <button onClick={() => setSelectedRecipeId(recipe.id)} className="w-full py-2 border-2 border-dashed border-slate-200 text-slate-500 rounded-xl font-semibold hover:bg-slate-50 transition-colors print-hide">
                                     + Tambah Bahan
                                   </button>
                                 )}
@@ -1972,9 +2003,11 @@
                                           type="text"
                                           inputMode="decimal"
                                           className="w-20 p-2 border border-slate-200 rounded text-right outline-none focus:border-emerald-500 text-sm"
-                                          value={recipe.yieldQty}
-                                          onChange={e => handleUpdateYield(recipe.id, formatQtyInput(e.target.value), recipe.yieldUnit)}
-                                          onBlur={(e) => handleSaveRecipe(recipe.id, { ...recipe, yieldQty: e.target.value })}
+                                          defaultValue={recipe.yieldQty}
+                                          onBlur={(e) => {
+                                            handleUpdateYield(recipe.id, formatQtyInput(e.target.value), recipe.yieldUnit);
+                                            handleSaveRecipe(recipe.id, { ...recipe, yieldQty: e.target.value });
+                                          }}
                                         />
                                         <select
                                           className="p-2 border border-slate-200 rounded outline-none focus:border-emerald-500 bg-white text-sm"
@@ -2003,7 +2036,7 @@
                                   <i className="fas fa-bullseye"></i> Analisis Profitabilitas
                                 </h4>
 
-                                <div className="mb-4 bg-white p-4 rounded-xl border border-emerald-200 shadow-sm">
+                                <div className="mb-4 bg-white p-4 rounded-xl border border-emerald-200 shadow-sm print-hide">
                                   <label className="text-xs font-bold text-emerald-800 uppercase mb-2 block">Foto Menu (Pilih dari Perangkat)</label>
 
                                   <div className="relative mb-3">
@@ -2038,7 +2071,7 @@
                                       {/* Tombol hapus gambar */}
                                       <button
                                         onClick={() => handleSaveRecipe(recipe.id, { ...recipe, imageUrl: '' })}
-                                        className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
+                                        className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md print-hide"
                                         title="Hapus Gambar"
                                       >
                                         <i className="fas fa-trash text-sm"></i>
@@ -2137,12 +2170,12 @@
                                             <textarea
                                               className="w-full bg-slate-50 text-slate-800 p-3 rounded-lg border border-slate-200 outline-none focus:border-emerald-500 font-medium text-sm min-h-[120px] mb-3 transition-colors"
                                               placeholder="1. Siapkan bahan..."
-                                              value={recipe.instructions || ''}
-                                              onChange={e => {
+                                              defaultValue={recipe.instructions || ''}
+                                              onBlur={e => {
                                                 const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, instructions: e.target.value } : r);
                                                 setRecipes(newRecipes);
+                                                handleSaveRecipe(recipe.id, { ...recipe, instructions: e.target.value });
                                               }}
-                                              onBlur={(e) => handleSaveRecipe(recipe.id, { ...recipe, instructions: e.target.value })}
                                             ></textarea>
                                             <button onClick={() => {
                                               const newInst = { prepTime: '', cookTime: '', tools: '', chefNote: '', phases: [{ phase: 'STEP 1', steps: [{ process: recipe.instructions || '', temp: '', time: '', notes: '' }] }] };
@@ -2168,15 +2201,15 @@
                                           <div className="grid grid-cols-3 gap-2">
                                             <div>
                                               <label className="text-[10px] text-emerald-700 uppercase font-bold">Prep Time</label>
-                                              <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 text-sm text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" value={inst.prepTime || ''} onChange={e => updateInst({ prepTime: e.target.value })}  placeholder="2 Min" />
+                                              <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 text-sm text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" defaultValue={inst.prepTime || ''} onBlur={e => updateInst({ prepTime: e.target.value })}  placeholder="2 Min" />
                                             </div>
                                             <div>
                                               <label className="text-[10px] text-emerald-700 uppercase font-bold">Cook Time</label>
-                                              <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 text-sm text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" value={inst.cookTime || ''} onChange={e => updateInst({ cookTime: e.target.value })}  placeholder="6 Min" />
+                                              <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 text-sm text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" defaultValue={inst.cookTime || ''} onBlur={e => updateInst({ cookTime: e.target.value })}  placeholder="6 Min" />
                                             </div>
                                             <div>
                                               <label className="text-[10px] text-emerald-700 uppercase font-bold">Tools</label>
-                                              <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 text-sm text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" value={inst.tools || ''} onChange={e => updateInst({ tools: e.target.value })}  placeholder="Wok, Deep Frying" />
+                                              <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 text-sm text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" defaultValue={inst.tools || ''} onBlur={e => updateInst({ tools: e.target.value })}  placeholder="Wok, Deep Frying" />
                                             </div>
                                           </div>
 
@@ -2184,7 +2217,7 @@
                                             {(inst.phases || []).map((phase, pIdx) => (
                                               <div key={pIdx} className="border border-emerald-200 rounded-lg p-2 bg-emerald-50/50">
                                                 <div className="flex gap-2 mb-2">
-                                                  <input type="text" className="flex-1 bg-white border border-emerald-200 rounded p-1.5 text-xs text-emerald-700 font-black uppercase outline-none focus:border-emerald-500 transition-colors" value={phase.phase} onChange={e => {
+                                                  <input type="text" className="flex-1 bg-white border border-emerald-200 rounded p-1.5 text-xs text-emerald-700 font-black uppercase outline-none focus:border-emerald-500 transition-colors" defaultValue={phase.phase} onBlur={e => {
                                                     const newPhases = [...inst.phases];
                                                     newPhases[pIdx].phase = e.target.value;
                                                     updateInst({ phases: newPhases });
@@ -2193,7 +2226,7 @@
                                                     const newPhases = inst.phases.filter((_, i) => i !== pIdx);
                                                     updateInst({ phases: newPhases });
                                                     handleSaveRecipe(recipe.id, { ...recipe, instructions: { ...inst, phases: newPhases } });
-                                                  }} className="text-rose-500 p-1.5 hover:bg-rose-100 rounded transition-colors" title="Hapus Fase"><i className="fas fa-trash"></i></button>
+                                                  }} className="text-rose-500 p-1.5 hover:bg-rose-100 rounded transition-colors print-hide" title="Hapus Fase"><i className="fas fa-trash"></i></button>
                                                 </div>
 
                                                 <div className="overflow-x-auto">
@@ -2210,11 +2243,11 @@
                                                     <tbody className="divide-y divide-emerald-100">
                                                       {(phase.steps || []).map((step, sIdx) => (
                                                         <tr key={sIdx}>
-                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" value={step.process} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].process = e.target.value; updateInst({ phases: newP }); }}  placeholder="Marinasi ikan..." /></td>
-                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-800 font-medium text-center outline-none focus:border-emerald-500 transition-colors" value={step.temp} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].temp = e.target.value; updateInst({ phases: newP }); }}  placeholder="170°C" /></td>
-                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-800 font-medium text-center outline-none focus:border-emerald-500 transition-colors" value={step.time} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].time = e.target.value; updateInst({ phases: newP }); }}  placeholder="4 min" /></td>
-                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" value={step.notes} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].notes = e.target.value; updateInst({ phases: newP }); }}  placeholder="Hingga slightly golden..." /></td>
-                                                          <td className="py-1 text-center">
+                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" defaultValue={step.process} onBlur={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].process = e.target.value; updateInst({ phases: newP }); }}  placeholder="Marinasi ikan..." /></td>
+                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-800 font-medium text-center outline-none focus:border-emerald-500 transition-colors" defaultValue={step.temp} onBlur={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].temp = e.target.value; updateInst({ phases: newP }); }}  placeholder="170°C" /></td>
+                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-800 font-medium text-center outline-none focus:border-emerald-500 transition-colors" defaultValue={step.time} onBlur={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].time = e.target.value; updateInst({ phases: newP }); }}  placeholder="4 min" /></td>
+                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" defaultValue={step.notes} onBlur={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].notes = e.target.value; updateInst({ phases: newP }); }}  placeholder="Hingga slightly golden..." /></td>
+                                                          <td className="py-1 text-center print-hide">
                                                             <button onClick={() => {
                                                               const newP = [...inst.phases]; newP[pIdx].steps.splice(sIdx, 1); updateInst({ phases: newP }); handleSaveRecipe(recipe.id, { ...recipe, instructions: { ...inst, phases: newP } });
                                                             }} className="text-slate-400 hover:text-rose-500 p-1 transition-colors"><i className="fas fa-times"></i></button>
@@ -2230,7 +2263,7 @@
                                                   newP[pIdx].steps.push({ process: '', temp: '', time: '', notes: '' });
                                                   updateInst({ phases: newP });
                                                   handleSaveRecipe(recipe.id, { ...recipe, instructions: { ...inst, phases: newP } });
-                                                }} className="mt-2 text-[10px] text-emerald-600 hover:text-emerald-700 font-bold bg-emerald-100 hover:bg-emerald-200 px-2 py-1 rounded transition-colors"><i className="fas fa-plus mr-1"></i> Tambah Baris Proses</button>
+                                                }} className="mt-2 text-[10px] text-emerald-600 hover:text-emerald-700 font-bold bg-emerald-100 hover:bg-emerald-200 px-2 py-1 rounded transition-colors print-hide"><i className="fas fa-plus mr-1"></i> Tambah Baris Proses</button>
                                               </div>
                                             ))}
                                           </div>
@@ -2239,13 +2272,13 @@
                                             const newP = [...(inst.phases || []), { phase: `STEP ${(inst.phases || []).length + 1}`, steps: [{ process: '', temp: '', time: '', notes: '' }] }];
                                             updateInst({ phases: newP });
                                             handleSaveRecipe(recipe.id, { ...recipe, instructions: { ...inst, phases: newP } });
-                                          }} className="w-full border-2 border-dashed border-emerald-300 text-emerald-600 hover:text-emerald-700 hover:border-emerald-400 hover:bg-emerald-50 p-2.5 rounded-lg text-xs font-bold transition-all bg-white">
+                                          }} className="w-full border-2 border-dashed border-emerald-300 text-emerald-600 hover:text-emerald-700 hover:border-emerald-400 hover:bg-emerald-50 p-2.5 rounded-lg text-xs font-bold transition-all bg-white print-hide">
                                             <i className="fas fa-plus-circle mr-1"></i> Tambah Fase Baru
                                           </button>
 
                                           <div>
                                             <label className="text-[10px] text-emerald-700 uppercase font-bold flex items-center gap-1 mb-1"><i className="fas fa-sticky-note"></i> Chef Note</label>
-                                            <textarea className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 font-medium min-h-[60px] outline-none focus:border-emerald-500 transition-colors" value={inst.chefNote || ''} onChange={e => updateInst({ chefNote: e.target.value })}  placeholder="Catatan khusus dari chef... (Cth: Goreng ikan dalam keadaan benar-benar thawing...)"></textarea>
+                                            <textarea className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 font-medium min-h-[60px] outline-none focus:border-emerald-500 transition-colors" defaultValue={inst.chefNote || ''} onBlur={e => updateInst({ chefNote: e.target.value })}  placeholder="Catatan khusus dari chef... (Cth: Goreng ikan dalam keadaan benar-benar thawing...)"></textarea>
                                           </div>
                                           <button onClick={() => {
                                             if (confirm('Ubah kembali ke mode teks biasa? Format tabel akan hilang.')) {
@@ -2254,7 +2287,7 @@
                                               setRecipes(newRecipes);
                                               handleSaveRecipe(recipe.id, { ...recipe, instructions: text });
                                             }
-                                          }} className="text-[10px] text-slate-500 hover:text-slate-700 underline mt-2 block text-center w-full transition-colors">Kembali ke Format Teks Biasa</button>
+                                          }} className="text-[10px] text-slate-500 hover:text-slate-700 underline mt-2 block text-center w-full transition-colors print-hide">Kembali ke Format Teks Biasa</button>
                                         </div>
                                       );
                                     })()}
