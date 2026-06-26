@@ -291,6 +291,7 @@
 
       // Auto-refresh setiap 60 detik untuk sinkronisasi multi-user
       const [saveToast, setSaveToast] = useState(null);
+      const [confirmDialog, setConfirmDialog] = useState(null);
       const toastTimeoutRef = React.useRef(null);
       const autoRefreshRef = React.useRef(null);
       const lastMutationTimeRef = React.useRef(0);
@@ -343,19 +344,27 @@
       }, [isLoggedIn, username, password]);
 
       const handleLogout = () => {
-        setIsLoggedIn(false);
-        setUsername('');
-        setPassword('');
-        setUserRole('');
-        setUsersList([]);
-        setPurchases([]);
-        setRecipes([]);
-        setSales([]);
-        setAdjustments([]);
-        setOverheadCosts([]);
-        setCustomConversions([]);
-        setActiveTab('recipes');
-        if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+        setConfirmDialog({
+          title: 'Keluar Aplikasi',
+          message: 'Apakah Anda yakin ingin keluar dari akun Anda?',
+          type: 'warning',
+          confirmText: 'Ya, Keluar',
+          onConfirm: () => {
+            setIsLoggedIn(false);
+            setUsername('');
+            setPassword('');
+            setUserRole('');
+            setUsersList([]);
+            setPurchases([]);
+            setRecipes([]);
+            setSales([]);
+            setAdjustments([]);
+            setOverheadCosts([]);
+            setCustomConversions([]);
+            setActiveTab('recipes');
+            if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+          }
+        });
       };
 
       // 2. Helper untuk mengirim data mutasi ke server (POST)
@@ -882,9 +891,16 @@
       };
 
       const handleDeletePurchase = (id) => {
-        if (!confirm('Hapus transaksi pembelian ini?')) return;
-        setPurchases(purchases.filter(i => i.id !== id));
-        sendApiRequest('deletePurchase', { id });
+        setConfirmDialog({
+          title: 'Hapus Pembelian',
+          message: 'Hapus transaksi pembelian ini secara permanen?',
+          type: 'danger',
+          confirmText: 'Ya, Hapus',
+          onConfirm: () => {
+            setPurchases(purchases.filter(i => i.id !== id));
+            sendApiRequest('deletePurchase', { id });
+          }
+        });
       };
 
       const handleEditPurchase = (p) => {
@@ -933,8 +949,16 @@
       };
 
       const handleDeleteSale = (id) => {
-        setSales(sales.filter(s => s.id !== id));
-        sendApiRequest('deleteSale', { id });
+        setConfirmDialog({
+          title: 'Hapus Data Masak',
+          message: 'Apakah Anda yakin ingin menghapus catatan masak ini?',
+          type: 'danger',
+          confirmText: 'Ya, Hapus',
+          onConfirm: () => {
+            setSales(sales.filter(s => s.id !== id));
+            sendApiRequest('deleteSale', { id });
+          }
+        });
       };
 
       const handleAddAdjustment = (e) => {
@@ -971,8 +995,16 @@
       };
 
       const handleDeleteAdjustment = (id) => {
-        setAdjustments(adjustments.filter(a => a.id !== id));
-        sendApiRequest('deleteAdjustment', { id });
+        setConfirmDialog({
+          title: 'Hapus Penyesuaian',
+          message: 'Hapus data penyesuaian stok ini secara permanen?',
+          type: 'danger',
+          confirmText: 'Hapus',
+          onConfirm: () => {
+            setAdjustments(adjustments.filter(a => a.id !== id));
+            sendApiRequest('deleteAdjustment', { id });
+          }
+        });
       };
 
       // --- USERS ---
@@ -996,9 +1028,16 @@
       };
 
       const handleDeleteUser = (id) => {
-        if (!confirm('Apakah Anda yakin ingin menghapus akun ini?')) return;
-        setUsersList(usersList.filter(u => u.id !== id));
-        sendApiRequest('deleteUser', { id });
+        setConfirmDialog({
+          title: 'Hapus Pengguna',
+          message: 'Apakah Anda yakin ingin menghapus akun ini?',
+          type: 'danger',
+          confirmText: 'Hapus',
+          onConfirm: () => {
+            setUsersList(usersList.filter(u => u.id !== id));
+            sendApiRequest('deleteUser', { id });
+          }
+        });
       };
 
       // --- IMAGES ---
@@ -1215,8 +1254,16 @@
       };
 
       const handleDeleteOverhead = (id) => {
-        setOverheadCosts(overheadCosts.filter(c => c.id !== id));
-        sendApiRequest('deleteOverhead', { id });
+        setConfirmDialog({
+          title: 'Hapus Biaya Overhead',
+          message: 'Apakah Anda yakin ingin menghapus data biaya overhead ini?',
+          type: 'danger',
+          confirmText: 'Hapus',
+          onConfirm: () => {
+            setOverheadCosts(overheadCosts.filter(c => c.id !== id));
+            sendApiRequest('deleteOverhead', { id });
+          }
+        });
       };
 
       // ==========================================
@@ -1411,6 +1458,29 @@
                   {saveToast.type === 'success' && <i className="fas fa-check-circle text-5xl mb-5 text-emerald-500 animate-in zoom-in"></i>}
                   {saveToast.type === 'error' && <i className="fas fa-exclamation-circle text-5xl mb-5 text-rose-500 animate-in zoom-in"></i>}
                   <span className="font-black text-xl text-slate-800 text-center">{saveToast.message}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Confirm Dialog Overlay */}
+            {confirmDialog && (
+              <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[999999] flex items-center justify-center animate-in fade-in duration-200">
+                <div className="bg-white rounded-3xl shadow-2xl w-11/12 max-w-sm p-6 animate-in zoom-in-95 duration-300">
+                  <div className="flex flex-col items-center text-center">
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${confirmDialog.type === 'danger' ? 'bg-rose-100 text-rose-500' : confirmDialog.type === 'warning' ? 'bg-amber-100 text-amber-500' : 'bg-emerald-100 text-emerald-500'}`}>
+                      <i className={`fas text-3xl ${confirmDialog.type === 'danger' ? 'fa-trash-alt' : confirmDialog.type === 'warning' ? 'fa-exclamation-triangle' : confirmDialog.type === 'success' ? 'fa-save' : 'fa-info-circle'}`}></i>
+                    </div>
+                    <h3 className="text-xl font-black text-slate-800 mb-2">{confirmDialog.title || 'Konfirmasi'}</h3>
+                    <p className="text-slate-500 mb-6 font-medium">{confirmDialog.message}</p>
+                    <div className="flex gap-3 w-full">
+                      <button onClick={() => setConfirmDialog(null)} className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors">
+                        Batal
+                      </button>
+                      <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog(null); }} className={`flex-1 py-3 px-4 font-bold rounded-xl text-white transition-colors ${confirmDialog.type === 'danger' ? 'bg-rose-500 hover:bg-rose-600' : confirmDialog.type === 'warning' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-500 hover:bg-emerald-600'}`}>
+                        {confirmDialog.confirmText || 'Ya'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1840,7 +1910,19 @@
                                 <i className="fas fa-print"></i> <span className="hidden sm:inline">Cetak PDF</span>
                               </button>
                               {!isCreatingNewRecipe && (
-                                <button onClick={() => { if (confirm('Hapus menu ini?')) { handleDeleteRecipe(recipe.id); setEditingRecipeData(null); setIsCreatingNewRecipe(false); } }} className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 p-2 rounded-lg transition-colors font-bold flex items-center gap-2">
+                                <button onClick={() => { 
+                                  setConfirmDialog({
+                                    title: 'Hapus Menu',
+                                    message: 'Apakah Anda yakin ingin menghapus menu ini?',
+                                    type: 'danger',
+                                    confirmText: 'Hapus',
+                                    onConfirm: () => {
+                                      handleDeleteRecipe(recipe.id); 
+                                      setEditingRecipeData(null); 
+                                      setIsCreatingNewRecipe(false);
+                                    }
+                                  });
+                                }} className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 p-2 rounded-lg transition-colors font-bold flex items-center gap-2">
                                   <i className="fas fa-trash-alt"></i> <span className="hidden sm:inline">Hapus</span>
                                 </button>
                               )}
@@ -1848,10 +1930,17 @@
                                 Batal
                               </button>
                               <button onClick={() => {
-                                // Save to main state and backend
-                                handleSaveRecipe(recipe.id, recipe);
-                                setEditingRecipeData(null);
-                                setIsCreatingNewRecipe(false);
+                                setConfirmDialog({
+                                  title: 'Simpan Resep',
+                                  message: 'Apakah Anda yakin ingin menyimpan perubahan pada resep ini?',
+                                  type: 'success',
+                                  confirmText: 'Simpan',
+                                  onConfirm: () => {
+                                    handleSaveRecipe(recipe.id, recipe);
+                                    setEditingRecipeData(null);
+                                    setIsCreatingNewRecipe(false);
+                                  }
+                                });
                               }} className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded-lg transition-colors font-bold flex items-center gap-2 px-4">
                                 <i className="fas fa-save"></i> Simpan & Keluar
                               </button>
