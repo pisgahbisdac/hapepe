@@ -292,10 +292,12 @@
       // Auto-refresh setiap 60 detik untuk sinkronisasi multi-user
       const [autoRefreshToast, setAutoRefreshToast] = useState('');
       const autoRefreshRef = React.useRef(null);
+      const lastMutationTimeRef = React.useRef(0);
 
       React.useEffect(() => {
         if (isLoggedIn && username && password) {
           autoRefreshRef.current = setInterval(() => {
+            if (Date.now() - lastMutationTimeRef.current < 20000) return;
             fetch(`${API_URL}?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`)
               .then(res => res.json())
               .then(res => {
@@ -357,6 +359,7 @@
 
       // 2. Helper untuk mengirim data mutasi ke server (POST)
       const sendApiRequest = async (action, data) => {
+        lastMutationTimeRef.current = Date.now();
         try {
           const response = await fetch(API_URL, {
             method: 'POST',
