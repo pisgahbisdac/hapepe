@@ -1772,10 +1772,10 @@
                               <div className="flex flex-col items-start gap-1 w-full">
                                 <input
                                   type="text"
-                                  className="font-black text-xl sm:text-2xl text-slate-800 bg-transparent border border-transparent hover:border-slate-300 focus:border-emerald-500 focus:bg-white outline-none rounded px-2 py-1 w-full transition-colors"
+                                  className="font-black text-xl sm:text-2xl text-slate-800 bg-slate-50 border border-slate-300 hover:border-slate-400 focus:border-emerald-500 focus:bg-white outline-none rounded px-3 py-2 w-full transition-colors shadow-sm placeholder-slate-400"
+                                  placeholder="Isi dengan nama menu"
                                   defaultValue={recipe.menuName}
                                   onBlur={(e) => updateDraft({ menuName: e.target.value })}
-                                  
                                   title="Klik untuk mengubah nama menu"
                                 />
                                 <div className="flex items-center gap-2 px-2 mt-1 w-full max-w-sm">
