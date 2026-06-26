@@ -2533,16 +2533,12 @@
                                               placeholder="1. Siapkan bahan..."
                                               defaultValue={recipe.instructions || ''}
                                               onBlur={e => {
-                                                const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, instructions: e.target.value } : r);
-                                                setRecipes(newRecipes);
-                                                handleSaveRecipe(recipe.id, { ...recipe, instructions: e.target.value });
+                                                updateDraft({ instructions: e.target.value });
                                               }}
                                             ></textarea>
                                             <button onClick={() => {
                                               const newInst = { prepTime: '', cookTime: '', tools: '', chefNote: '', phases: [{ phase: 'STEP 1', steps: [{ process: recipe.instructions || '', temp: '', time: '', notes: '' }] }] };
-                                              const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, instructions: newInst } : r);
-                                              setRecipes(newRecipes);
-                                              handleSaveRecipe(recipe.id, { ...recipe, instructions: newInst });
+                                              updateDraft({ instructions: newInst });
                                             }} className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg transition-colors w-full flex items-center justify-center gap-2 shadow-sm">
                                               <i className="fas fa-magic"></i> Ubah ke Format Kartu Resep Profesional
                                             </button>
@@ -2553,8 +2549,7 @@
                                       const inst = recipe.instructions;
                                       const updateInst = (updates) => {
                                         const newInst = { ...inst, ...updates };
-                                        const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, instructions: newInst } : r);
-                                        setRecipes(newRecipes);
+                                        updateDraft({ instructions: newInst });
                                       };
 
                                       return (
