@@ -290,7 +290,8 @@
       // Hapus useEffect fetchData otomatis agar user harus login manual.
 
       // Auto-refresh setiap 60 detik untuk sinkronisasi multi-user
-      const [autoRefreshToast, setAutoRefreshToast] = useState('');
+      const [saveToast, setSaveToast] = useState(null);
+      const toastTimeoutRef = React.useRef(null);
       const autoRefreshRef = React.useRef(null);
       const lastMutationTimeRef = React.useRef(0);
 
@@ -298,6 +299,7 @@
         if (isLoggedIn && username && password) {
           autoRefreshRef.current = setInterval(() => {
             if (Date.now() - lastMutationTimeRef.current < 20000) return;
+            setIsRefreshing(true);
             fetch(`${API_URL}?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`)
               .then(res => res.json())
               .then(res => {
@@ -331,11 +333,10 @@
                   setAdjustments(res.data.adjustments || []);
                   setCustomConversions(res.data.conversions || []);
                   if (res.data.users) setUsersList(res.data.users);
-                  setAutoRefreshToast('Data disinkronkan');
-                  setTimeout(() => setAutoRefreshToast(''), 3000);
                 }
               })
-              .catch(() => { });
+              .catch(() => { })
+              .finally(() => setIsRefreshing(false));
           }, 60000);
         }
         return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current); };
@@ -360,17 +361,27 @@
       // 2. Helper untuk mengirim data mutasi ke server (POST)
       const sendApiRequest = async (action, data) => {
         lastMutationTimeRef.current = Date.now();
+        setSaveToast({ type: 'loading', message: 'Sedang menyimpan...' });
+        if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
         try {
           const response = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action, data, username, password }),
           });
           const result = await response.json();
-          if (result.status !== 'success') {
+          if (result.status === 'success') {
+            setSaveToast({ type: 'success', message: 'Data berhasil disimpan' });
+          } else {
             console.error('API Error:', result.message);
+            setSaveToast({ type: 'error', message: 'Gagal: ' + result.message });
           }
         } catch (err) {
           console.error('Request failed:', err);
+          setSaveToast({ type: 'error', message: 'Gagal terhubung ke server' });
+        } finally {
+          toastTimeoutRef.current = setTimeout(() => {
+            setSaveToast(null);
+          }, 3000);
         }
       };
 
@@ -1111,8 +1122,13 @@
               { itemName: 'META_MENU_CATEGORY', quantity: recipe.menuCategory || '' }
             ]
           };
+          const isNewRecipe = !recipes.some(r => r.id === recipeId);
+          if (isNewRecipe) {
+            sendApiRequest('addRecipe', payload);
+          } else {
+            sendApiRequest('updateRecipe', payload);
+          }
 
-          sendApiRequest('updateRecipe', payload);
           setRecipes(prevRecipes => {
             const savedRecipe = { ...recipe, ingredients: cleanedIngredients.map(i => ({ ...i, quantity: formatQtyInput(i.quantity) })), yieldQty: formatQtyInput(parsedYield) };
             if (prevRecipes.some(r => r.id === recipeId)) {
@@ -1387,10 +1403,15 @@
         <div className="min-h-screen p-4 md:p-8 font-sans pb-20">
           <div className="max-w-[1600px] px-4 mx-auto space-y-6">
 
-            {/* Toast Auto-Refresh */}
-            {autoRefreshToast && (
-              <div className="fixed top-4 right-4 z-50 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg flex items-center gap-2 animate-slide-up text-sm font-medium">
-                <i className="fas fa-sync-alt fa-spin"></i> {autoRefreshToast}
+            {/* Loading / Save Overlay */}
+            {saveToast && (
+              <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[99999] flex items-center justify-center animate-in fade-in duration-200">
+                <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center justify-center min-w-[280px] animate-in zoom-in-95 duration-300">
+                  {saveToast.type === 'loading' && <i className="fas fa-circle-notch fa-spin text-5xl mb-5 text-emerald-500"></i>}
+                  {saveToast.type === 'success' && <i className="fas fa-check-circle text-5xl mb-5 text-emerald-500 animate-in zoom-in"></i>}
+                  {saveToast.type === 'error' && <i className="fas fa-exclamation-circle text-5xl mb-5 text-rose-500 animate-in zoom-in"></i>}
+                  <span className="font-black text-xl text-slate-800 text-center">{saveToast.message}</span>
+                </div>
               </div>
             )}
 
