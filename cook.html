@@ -25,6 +25,58 @@
     const { useState, useEffect, useMemo } = React;
     const API_URL = 'https://script.google.com/macros/s/AKfycbwLLywyEdvDZhKajLmbpN8ZeFTeYkB5DRc3umPpdquRMekRnqc9ZSb2YBNguumBfXvb/exec';
 
+    const CustomSelect = ({ value, onChange, options, className, placeholder, icon, title, listClassName }) => {
+      const [isOpen, setIsOpen] = useState(false);
+      const containerRef = React.useRef(null);
+
+      React.useEffect(() => {
+        const handleClickOutside = (e) => {
+          if (containerRef.current && !containerRef.current.contains(e.target)) {
+            setIsOpen(false);
+          }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+      }, []);
+
+      const selectedOption = options.find(o => String(o.value) === String(value));
+      
+      return (
+        <div className={`relative ${className?.includes('w-') ? '' : 'w-full'}`} ref={containerRef} title={title}>
+          <button 
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className={`text-left flex justify-between items-center outline-none bg-white border border-slate-200 rounded-xl hover:border-emerald-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all ${className}`}
+          >
+            <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+              {icon && <span className="text-slate-400 shrink-0">{icon}</span>}
+              <span className={`truncate ${!selectedOption && placeholder ? 'text-slate-400' : ''}`}>
+                {selectedOption ? selectedOption.label : placeholder || 'Pilih...'}
+              </span>
+            </div>
+            <i className={`fas fa-chevron-down text-slate-400 text-[10px] transition-transform duration-300 ml-2 shrink-0 ${isOpen ? 'rotate-180' : ''}`}></i>
+          </button>
+          {isOpen && (
+            <div className={`absolute z-[9999] mt-2 bg-white rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-100 overflow-hidden py-2 animate-in fade-in zoom-in-95 duration-200 ${listClassName || 'w-full min-w-[150px] left-0'}`}>
+              <div className="max-h-60 overflow-y-auto custom-scrollbar px-1">
+                {options.map((opt, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onChange(opt.value); setIsOpen(false); }}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all flex items-center justify-between group ${String(value) === String(opt.value) ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+                  >
+                    <span className="truncate">{opt.label}</span>
+                    {String(value) === String(opt.value) && <i className="fas fa-check text-emerald-500 text-xs"></i>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
     function CookApp() {
       const [recipes, setRecipes] = useState([]);
       const [purchases, setPurchases] = useState([]);
@@ -332,20 +384,16 @@
                     />
                   </div>
                   <div className="relative w-full sm:w-64 shrink-0">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <i className="fas fa-tags text-slate-400"></i>
-                    </div>
-                    <select
-                      className="w-full pl-11 pr-4 py-4 bg-stone-50 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 font-medium text-lg text-slate-800 transition-colors appearance-none"
+                    <CustomSelect
+                      className="py-4 px-4 bg-stone-50 border-2 border-slate-100 font-medium text-lg text-slate-800"
                       value={filterDapurCategory}
-                      onChange={(e) => setFilterDapurCategory(e.target.value)}
-                    >
-                      <option value="">Semua Kategori</option>
-                      {Array.from(new Set(recipes.map(r => r.ingredients?.find(i => i.itemName === 'META_MENU_CATEGORY')?.quantity).filter(Boolean))).map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                    <i className="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                      onChange={(val) => setFilterDapurCategory(val)}
+                      icon={<i className="fas fa-tags text-lg"></i>}
+                      options={[
+                        { label: 'Semua Kategori', value: '' },
+                        ...Array.from(new Set(recipes.map(r => r.ingredients?.find(i => i.itemName === 'META_MENU_CATEGORY')?.quantity).filter(Boolean))).map(cat => ({ label: cat, value: cat }))
+                      ]}
+                    />
                   </div>
                 </div>
 

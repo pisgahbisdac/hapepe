@@ -169,6 +169,57 @@
       return { startDate, endDate };
     };
 
+    const CustomSelect = ({ value, onChange, options, className, placeholder, icon, title, listClassName }) => {
+      const [isOpen, setIsOpen] = useState(false);
+      const containerRef = React.useRef(null);
+
+      React.useEffect(() => {
+        const handleClickOutside = (e) => {
+          if (containerRef.current && !containerRef.current.contains(e.target)) {
+            setIsOpen(false);
+          }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+      }, []);
+
+      const selectedOption = options.find(o => String(o.value) === String(value));
+      
+      return (
+        <div className={`relative ${className?.includes('w-') ? '' : 'w-full'}`} ref={containerRef} title={title}>
+          <button 
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className={`text-left flex justify-between items-center outline-none bg-white border border-slate-200 rounded-xl hover:border-emerald-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all ${className}`}
+          >
+            <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+              {icon && <span className="text-slate-400 shrink-0">{icon}</span>}
+              <span className={`truncate ${!selectedOption && placeholder ? 'text-slate-400' : ''}`}>
+                {selectedOption ? selectedOption.label : placeholder || 'Pilih...'}
+              </span>
+            </div>
+            <i className={`fas fa-chevron-down text-slate-400 text-[10px] transition-transform duration-300 ml-2 shrink-0 ${isOpen ? 'rotate-180' : ''}`}></i>
+          </button>
+          {isOpen && (
+            <div className={`absolute z-[9999] mt-2 bg-white rounded-2xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.15)] border border-slate-100 overflow-hidden py-2 animate-in fade-in zoom-in-95 duration-200 ${listClassName || 'w-full min-w-[150px] left-0'}`}>
+              <div className="max-h-60 overflow-y-auto custom-scrollbar px-1">
+                {options.map((opt, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onChange(opt.value); setIsOpen(false); }}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all flex items-center justify-between group ${String(value) === String(opt.value) ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
+                  >
+                    <span className="truncate">{opt.label}</span>
+                    {String(value) === String(opt.value) && <i className="fas fa-check text-emerald-500 text-xs"></i>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
 
     function App() {
       const [activeTab, setActiveTab] = useState('recipes');
@@ -1587,12 +1638,23 @@
                       </div>
                       <div className="w-24">
                         <label className="text-sm font-semibold">Satuan</label>
-                        <select className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" value={newPurchase.unit} onChange={e => setNewPurchase({ ...newPurchase, unit: e.target.value })}>
-                          <option value="kg">kg</option>
-                          <option value="gram">gram</option>
-                          <option value="liter">liter</option>
-                          <option value="ml">ml</option>
-                        </select>
+                        <CustomSelect 
+                          className="py-2.5 px-3 bg-slate-50 font-medium"
+                          value={newPurchase.unit} 
+                          onChange={val => setNewPurchase({ ...newPurchase, unit: val })}
+                          options={[
+                            { label: 'kg', value: 'kg' },
+                            { label: 'gram', value: 'gram' },
+                            { label: 'liter', value: 'liter' },
+                            { label: 'ml', value: 'ml' },
+                            { label: 'pcs', value: 'pcs' },
+                            { label: 'ikat', value: 'ikat' },
+                            { label: 'pak', value: 'pak' },
+                            { label: 'dus', value: 'dus' },
+                            { label: 'kaleng', value: 'kaleng' },
+                            { label: 'botol', value: 'botol' }
+                          ]}
+                        />
                       </div>
                     </div>
                     <div>
@@ -1650,12 +1712,25 @@
                                   </td>
                                   <td className="p-3 flex gap-1">
                                     <input type="text" placeholder="Qty" title="Kuantitas" className="p-2 border border-slate-200 rounded-lg w-16 text-sm outline-none focus:border-blue-500" value={editPurchaseData.quantity} onChange={e => setEditPurchaseData({ ...editPurchaseData, quantity: formatQtyInput(e.target.value) })} />
-                                    <select title="Satuan" className="p-2 border border-slate-200 rounded-lg w-20 text-sm outline-none focus:border-blue-500" value={editPurchaseData.unit} onChange={e => setEditPurchaseData({ ...editPurchaseData, unit: e.target.value })}>
-                                      <option value="kg">kg</option>
-                                      <option value="gram">gram</option>
-                                      <option value="liter">liter</option>
-                                      <option value="ml">ml</option>
-                                    </select>
+                                    <CustomSelect 
+                                      className="py-2 px-3 bg-white w-20 text-sm"
+                                      listClassName="w-24 left-0"
+                                      title="Satuan"
+                                      value={editPurchaseData.unit} 
+                                      onChange={val => setEditPurchaseData({ ...editPurchaseData, unit: val })}
+                                      options={[
+                                        { label: 'kg', value: 'kg' },
+                                        { label: 'gram', value: 'gram' },
+                                        { label: 'liter', value: 'liter' },
+                                        { label: 'ml', value: 'ml' },
+                                        { label: 'pcs', value: 'pcs' },
+                                        { label: 'ikat', value: 'ikat' },
+                                        { label: 'pak', value: 'pak' },
+                                        { label: 'dus', value: 'dus' },
+                                        { label: 'kaleng', value: 'kaleng' },
+                                        { label: 'botol', value: 'botol' }
+                                      ]}
+                                    />
                                   </td>
                                   <td className="p-3 text-right text-emerald-600 font-bold">
                                     {formatRp((Number(editPurchaseData.totalPrice) / Number(editPurchaseData.quantity)) || 0)}
@@ -1685,7 +1760,7 @@
                                   <button onClick={() => handleEditPurchase(p)} className="text-blue-400 hover:text-blue-600 hover:bg-blue-50 p-2 rounded transition-colors mr-1" title="Edit">
                                     <i className="fas fa-edit"></i>
                                   </button>
-                                  <button onClick={() => handleDeletePurchase(p.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded transition-colors" title="Hapus">
+                                  <button onClick={() => handleDeletePurchase(p.id)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded transition-colors ml-10" title="Hapus">
                                     <i className="fas fa-trash-alt"></i>
                                   </button>
                                 </td>
@@ -1729,7 +1804,7 @@
                         <span className="font-medium text-slate-700">{cost.name}</span>
                         <div className="flex items-center gap-4">
                           <span className="font-bold text-slate-900">{formatRp(cost.amount)}</span>
-                          <button onClick={() => handleDeleteOverhead(cost.id)} className="text-red-400 p-2 rounded hover:bg-red-50">
+                          <button onClick={() => handleDeleteOverhead(cost.id)} className="text-red-400 p-2 rounded hover:bg-red-50 ml-10">
                             <i className="fas fa-trash-alt"></i>
                           </button>
                         </div>
@@ -1788,20 +1863,16 @@
                     />
                   </div>
                   <div className="relative w-full sm:w-64 shrink-0">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <i className="fas fa-tags text-slate-400"></i>
-                    </div>
-                    <select
-                      className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-medium transition-colors appearance-none"
+                    <CustomSelect
+                      className="py-3 px-4 bg-slate-50 font-medium"
                       value={filterCostingCategory}
-                      onChange={(e) => setFilterCostingCategory(e.target.value)}
-                    >
-                      <option value="">Semua Kategori</option>
-                      {Array.from(new Set(recipes.map(r => r.menuCategory).filter(Boolean))).map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                    <i className="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                      onChange={(val) => setFilterCostingCategory(val)}
+                      icon={<i className="fas fa-tags"></i>}
+                      options={[
+                        { label: 'Semua Kategori', value: '' },
+                        ...Array.from(new Set(recipes.map(r => r.menuCategory).filter(Boolean))).map(cat => ({ label: cat, value: cat }))
+                      ]}
+                    />
                   </div>
                   <datalist id="menu-categories-list">
                     {Array.from(new Set(recipes.map(r => r.menuCategory).filter(Boolean))).map(cat => (
@@ -1922,7 +1993,7 @@
                                       setIsCreatingNewRecipe(false);
                                     }
                                   });
-                                }} className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 p-2 rounded-lg transition-colors font-bold flex items-center gap-2">
+                                }} className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 p-2 rounded-lg transition-colors font-bold flex items-center gap-2 mr-6 md:mr-16">
                                   <i className="fas fa-trash-alt"></i> <span className="hidden sm:inline">Hapus</span>
                                 </button>
                               )}
@@ -2187,17 +2258,19 @@
                                   <div className="flex flex-wrap items-center gap-4">
                                     <div className="flex flex-col gap-2">
                                       <label className="text-[10px] font-bold text-slate-500 uppercase">Status Resep</label>
-                                      <select
-                                        className="p-2 border border-slate-200 rounded outline-none focus:border-emerald-500 bg-white text-sm"
+                                      <CustomSelect
+                                        className="p-2 border border-slate-200 bg-white text-sm"
+                                        listClassName="w-40 right-0"
                                         value={recipe.recipeType || 'final'}
-                                        onChange={e => {
-                                          handleUpdateType(recipe.id, e.target.value);
-                                          handleSaveRecipe(recipe.id, { ...recipe, recipeType: e.target.value });
+                                        onChange={val => {
+                                          handleUpdateType(recipe.id, val);
+                                          handleSaveRecipe(recipe.id, { ...recipe, recipeType: val });
                                         }}
-                                      >
-                                        <option value="final">Menu Akhir (Jual)</option>
-                                        <option value="sub">Bahan 1/2 Jadi</option>
-                                      </select>
+                                        options={[
+                                          { label: 'Menu Akhir (Jual)', value: 'final' },
+                                          { label: 'Bahan 1/2 Jadi', value: 'sub' }
+                                        ]}
+                                      />
                                     </div>
                                     <div className="flex flex-col gap-2">
                                       <label className="text-[10px] font-bold text-slate-500 uppercase">Jumlah Hasil</label>
@@ -2212,21 +2285,23 @@
                                             handleSaveRecipe(recipe.id, { ...recipe, yieldQty: e.target.value });
                                           }}
                                         />
-                                        <select
-                                          className="p-2 border border-slate-200 rounded outline-none focus:border-emerald-500 bg-white text-sm"
+                                        <CustomSelect
+                                          className="p-2 border border-slate-200 bg-white text-sm w-24"
+                                          listClassName="w-24 right-0"
                                           value={recipe.yieldUnit || 'porsi'}
-                                          onChange={e => {
-                                            handleUpdateYield(recipe.id, recipe.yieldQty, e.target.value);
-                                            handleSaveRecipe(recipe.id, { ...recipe, yieldUnit: e.target.value });
+                                          onChange={val => {
+                                            handleUpdateYield(recipe.id, recipe.yieldQty, val);
+                                            handleSaveRecipe(recipe.id, { ...recipe, yieldUnit: val });
                                           }}
-                                        >
-                                          <option value="porsi">Porsi</option>
-                                          <option value="gram">Gram</option>
-                                          <option value="kg">Kg</option>
-                                          <option value="ml">Ml</option>
-                                          <option value="liter">Liter</option>
-                                          <option value="pcs">Pcs</option>
-                                        </select>
+                                          options={[
+                                            { label: 'Porsi', value: 'porsi' },
+                                            { label: 'Gram', value: 'gram' },
+                                            { label: 'Kg', value: 'kg' },
+                                            { label: 'Ml', value: 'ml' },
+                                            { label: 'Liter', value: 'liter' },
+                                            { label: 'Pcs', value: 'pcs' }
+                                          ]}
+                                        />
                                       </div>
                                     </div>
                                   </div>
@@ -2660,20 +2735,16 @@
                     />
                   </div>
                   <div className="relative w-full sm:w-64 shrink-0">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <i className="fas fa-tags text-slate-400"></i>
-                    </div>
-                    <select
-                      className="w-full pl-11 pr-4 py-4 bg-stone-50 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 font-medium text-lg text-slate-800 transition-colors appearance-none"
+                    <CustomSelect
+                      className="py-4 px-4 bg-stone-50 border-2 border-slate-100 font-medium text-lg text-slate-800"
                       value={filterKatalogCategory}
-                      onChange={(e) => setFilterKatalogCategory(e.target.value)}
-                    >
-                      <option value="">Semua Kategori</option>
-                      {Array.from(new Set(recipes.map(r => r.menuCategory).filter(Boolean))).map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                    <i className="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                      onChange={(val) => setFilterKatalogCategory(val)}
+                      icon={<i className="fas fa-tags text-lg"></i>}
+                      options={[
+                        { label: 'Semua Kategori', value: '' },
+                        ...Array.from(new Set(recipes.map(r => r.menuCategory).filter(Boolean))).map(cat => ({ label: cat, value: cat }))
+                      ]}
+                    />
                   </div>
                 </div>
 
@@ -3306,7 +3377,7 @@
                             }} className="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg transition-colors" title="Edit Akun">
                               <i className="fas fa-edit"></i>
                             </button>
-                            <button onClick={() => handleDeleteUser(u.id)} className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors" title="Hapus Akun">
+                            <button onClick={() => handleDeleteUser(u.id)} className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors ml-10" title="Hapus Akun">
                               <i className="fas fa-trash-alt"></i>
                             </button>
                           </div>
@@ -3352,10 +3423,15 @@
                     </div>
                     <div>
                       <label className="text-sm font-semibold mb-1 block text-slate-700">Role (Hak Akses)</label>
-                      <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-blue-500 font-medium" value={newUser.role} onChange={e => setNewUser({ ...newUser, role: e.target.value })} required>
-                        <option value="admin">Admin</option>
-                        <option value="staff">Staff</option>
-                      </select>
+                      <CustomSelect 
+                        className="py-3 px-4 bg-slate-50 font-medium"
+                        value={newUser.role} 
+                        onChange={val => setNewUser({ ...newUser, role: val })}
+                        options={[
+                          { label: 'Admin', value: 'admin' },
+                          { label: 'Staff', value: 'staff' }
+                        ]}
+                      />
                     </div>
                     <div className="pt-4 flex gap-3">
                       <button type="button" onClick={() => setShowUserModal(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 p-3 rounded-xl font-bold transition-colors">
