@@ -183,6 +183,7 @@ function doGet(e) {
         
         let instructions = '';
         let netWeights = {};
+        let realIngIndex = 0;
         // Baca Bahan dari Kolom H dst (index 7, 8, 9, 10, 11, 12...)
         for (let j = 7; j < row.length; j += 3) {
           if (row[j] === 'META_INSTRUCTIONS') {
@@ -197,17 +198,27 @@ function doGet(e) {
               id: new Date().getTime() + j, // ID sementara untuk UI React
               itemName: row[j],
               quantity: row[j+1],
-              unit: row[j+2] || ''
+              unit: row[j+2] || '',
+              __origIndex: realIngIndex
             });
+            realIngIndex++;
           }
         }
         
         ingredients = ingredients.map(ing => {
-          if (netWeights && netWeights[ing.itemName]) {
-            ing.netQty = netWeights[ing.itemName].netQty;
-            ing.measure = netWeights[ing.itemName].measure;
-            ing.category = netWeights[ing.itemName].category;
+          let meta = null;
+          if (netWeights && ing.__origIndex !== undefined && netWeights[ing.__origIndex]) {
+            meta = netWeights[ing.__origIndex];
+          } else if (netWeights && netWeights[ing.itemName]) {
+            meta = netWeights[ing.itemName];
           }
+
+          if (meta) {
+            ing.netQty = meta.netQty;
+            ing.measure = meta.measure;
+            ing.category = meta.category;
+          }
+          delete ing.__origIndex;
           return ing;
         });
         
@@ -307,6 +318,7 @@ function doPost(e) {
           
           let instructions = '';
           let netWeights = {};
+          let realIngIndex = 0;
           for (let j = 7; j < row.length; j += 3) {
             if (row[j] === 'META_INSTRUCTIONS') {
               instructions = row[j+1] || '';
@@ -320,17 +332,27 @@ function doPost(e) {
                 id: new Date().getTime() + j,
                 itemName: row[j],
                 quantity: row[j+1],
-                unit: row[j+2] || ''
+                unit: row[j+2] || '',
+                __origIndex: realIngIndex
               });
+              realIngIndex++;
             }
           }
           
           ingredients = ingredients.map(ing => {
-            if (netWeights && netWeights[ing.itemName]) {
-              ing.netQty = netWeights[ing.itemName].netQty;
-              ing.measure = netWeights[ing.itemName].measure;
-              ing.category = netWeights[ing.itemName].category;
+            let meta = null;
+            if (netWeights && ing.__origIndex !== undefined && netWeights[ing.__origIndex]) {
+              meta = netWeights[ing.__origIndex];
+            } else if (netWeights && netWeights[ing.itemName]) {
+              meta = netWeights[ing.itemName];
             }
+
+            if (meta) {
+              ing.netQty = meta.netQty;
+              ing.measure = meta.measure;
+              ing.category = meta.category;
+            }
+            delete ing.__origIndex;
             return ing;
           });
           
@@ -650,9 +672,9 @@ function addRecipeRowData(data) {
   
   // 4. Append META_NET_WEIGHTS
   let netWeightsObj = {};
-  realIngs.forEach(ing => {
+  realIngs.forEach((ing, index) => {
     if (ing.netQty !== undefined || ing.measure !== undefined || ing.category !== undefined) {
-      netWeightsObj[ing.itemName] = { netQty: ing.netQty, measure: ing.measure, category: ing.category };
+      netWeightsObj[index] = { netQty: ing.netQty, measure: ing.measure, category: ing.category };
     }
   });
   if (Object.keys(netWeightsObj).length > 0) {

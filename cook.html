@@ -31,15 +31,22 @@
       const [sales, setSales] = useState([]);
       const [adjustments, setAdjustments] = useState([]);
       const [searchKatalog, setSearchKatalog] = useState('');
+      const [filterDapurCategory, setFilterDapurCategory] = useState('');
       const [selectedKatalogMenu, setSelectedKatalogMenu] = useState(null);
       const [isLoading, setIsLoading] = useState(true);
 
+      const autoRefreshRef = React.useRef(null);
+
       useEffect(() => {
         fetchRecipes();
+        autoRefreshRef.current = setInterval(() => {
+          fetchRecipes(true);
+        }, 60000);
+        return () => clearInterval(autoRefreshRef.current);
       }, []);
 
-      const fetchRecipes = async () => {
-        setIsLoading(true);
+      const fetchRecipes = async (isSilent = false) => {
+        if (isSilent !== true) setIsLoading(true);
         try {
           const response = await fetch(API_URL, {
             method: 'POST',
@@ -52,12 +59,12 @@
             setSales(result.data.sales || []);
             setAdjustments(result.data.adjustments || []);
           } else {
-            alert('Gagal mengambil data resep: ' + result.message);
+            if (isSilent !== true) alert('Gagal mengambil data resep: ' + result.message);
           }
         } catch (error) {
-          alert('Terjadi kesalahan jaringan.');
+          if (isSilent !== true) alert('Terjadi kesalahan jaringan.');
         } finally {
-          setIsLoading(false);
+          if (isSilent !== true) setIsLoading(false);
         }
       };
 
@@ -159,7 +166,7 @@
           const r = recipes.find(rec => rec.id === recId);
           if (!r) return;
           r.ingredients.forEach(ing => {
-            if (ing.id === 'META_YIELD' || ing.itemName === 'META_STATUS') return;
+            if (ing.id === 'META_YIELD' || ing.itemName === 'META_STATUS' || ing.itemName === 'META_CATEGORY_ORDER' || ing.itemName === 'META_MENU_CATEGORY') return;
             const qty = parseNumberInput(ing.quantity) * mult;
             if (qty <= 0) return;
             const searchStr = String(ing.itemName || '').toLowerCase();
@@ -238,8 +245,8 @@
             ) : (
               <div className="space-y-6">
                 {/* Search Bar */}
-                <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200">
-                  <div className="relative">
+                <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row gap-4">
+                  <div className="relative flex-1">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                       <i className="fas fa-search text-slate-400"></i>
                     </div>
@@ -251,11 +258,27 @@
                       onChange={(e) => setSearchKatalog(e.target.value)}
                     />
                   </div>
+                  <div className="relative w-full sm:w-64 shrink-0">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <i className="fas fa-tags text-slate-400"></i>
+                    </div>
+                    <select
+                      className="w-full pl-11 pr-4 py-4 bg-stone-50 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 font-medium text-lg text-slate-800 transition-colors appearance-none"
+                      value={filterDapurCategory}
+                      onChange={(e) => setFilterDapurCategory(e.target.value)}
+                    >
+                      <option value="">Semua Kategori</option>
+                      {Array.from(new Set(recipes.map(r => r.ingredients?.find(i => i.itemName === 'META_MENU_CATEGORY')?.quantity).filter(Boolean))).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    <i className="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                  </div>
                 </div>
 
                 {/* Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                  {recipes.filter(r => r.ingredients?.find(i => i.id === 'META_YIELD')?.type !== 'sub' && r.menuName.toLowerCase().includes(searchKatalog.toLowerCase()) && String(r.ingredients?.find(i => i.itemName === 'META_STATUS')?.quantity) !== 'false').map(recipe => (
+                  {recipes.filter(r => r.ingredients?.find(i => i.id === 'META_YIELD')?.type !== 'sub' && r.menuName.toLowerCase().includes(searchKatalog.toLowerCase()) && String(r.ingredients?.find(i => i.itemName === 'META_STATUS')?.quantity) !== 'false' && (!filterDapurCategory || r.ingredients?.find(i => i.itemName === 'META_MENU_CATEGORY')?.quantity === filterDapurCategory)).map(recipe => (
                     <div key={recipe.id} onClick={() => setSelectedKatalogMenu(recipe)} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden group cursor-pointer hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col">
                       {/* Image Container: Aspect Square (1:1) full width */}
                       <div className="w-full aspect-square bg-slate-100 relative overflow-hidden flex items-center justify-center shrink-0 border-b border-slate-100">
@@ -298,7 +321,7 @@
                       </div>
                     </div>
                   ))}
-                  {recipes.filter(r => r.ingredients?.find(i => i.id === 'META_YIELD')?.type !== 'sub' && r.menuName.toLowerCase().includes(searchKatalog.toLowerCase())).length === 0 && !isLoading && (
+                  {recipes.filter(r => r.ingredients?.find(i => i.id === 'META_YIELD')?.type !== 'sub' && r.menuName.toLowerCase().includes(searchKatalog.toLowerCase()) && String(r.ingredients?.find(i => i.itemName === 'META_STATUS')?.quantity) !== 'false' && (!filterDapurCategory || r.ingredients?.find(i => i.itemName === 'META_MENU_CATEGORY')?.quantity === filterDapurCategory)).length === 0 && !isLoading && (
                     <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-slate-200">
                       <div className="bg-stone-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-200">
                         <i className="fas fa-search text-3xl text-slate-400"></i>
@@ -374,9 +397,16 @@
                         // Group ingredients
                         const groupedIngredients = {};
                         const uncategorized = [];
+                        let customCategoryOrder = [];
+                        
                         if (recipe.ingredients) {
+                          const catOrderMeta = recipe.ingredients.find(i => i.itemName === 'META_CATEGORY_ORDER');
+                          if (catOrderMeta && catOrderMeta.quantity) {
+                            try { customCategoryOrder = JSON.parse(catOrderMeta.quantity); } catch (e) { }
+                          }
+
                           recipe.ingredients.forEach(ing => {
-                            if (ing.id === 'META_YIELD' || ing.itemName === 'META_STATUS') return;
+                            if (ing.id === 'META_YIELD' || ing.itemName === 'META_STATUS' || ing.itemName === 'META_CATEGORY_ORDER' || ing.itemName === 'META_MENU_CATEGORY') return;
                             if (ing.category) {
                               if (!groupedIngredients[ing.category]) groupedIngredients[ing.category] = [];
                               groupedIngredients[ing.category].push(ing);
@@ -385,6 +415,20 @@
                             }
                           });
                         }
+
+                        const sortedCategories = Object.keys(groupedIngredients).sort((a, b) => {
+                          let idxA = customCategoryOrder.indexOf(a);
+                          let idxB = customCategoryOrder.indexOf(b);
+                          
+                          if (idxA === -1 && idxB === -1) {
+                            if (a === 'OTHERS') return 1;
+                            if (b === 'OTHERS') return -1;
+                            return a.localeCompare(b);
+                          }
+                          if (idxA === -1) return 1;
+                          if (idxB === -1) return -1;
+                          return idxA - idxB;
+                        });
 
                         return (
                           <React.Fragment>
@@ -410,10 +454,10 @@
                             {/* Ingredients inside Left Column */}
                             <div>
                               <h3 className="font-bold text-lg mb-3 text-emerald-600 flex items-center gap-2"><i className="fas fa-shopping-basket"></i> Bahan Baku</h3>
-                              <div className="rounded-xl overflow-hidden border border-slate-200 bg-white shadow-sm">
-                                <table className="w-full text-sm">
+                              <div className="rounded-xl overflow-x-auto border border-slate-200 bg-white shadow-sm">
+                                <table className="w-full text-sm min-w-[300px]">
                                   <tbody className="divide-y divide-slate-200">
-                                    {Object.keys(groupedIngredients).map(cat => (
+                                    {sortedCategories.map(cat => (
                                       <React.Fragment key={cat}>
                                         <tr className="bg-slate-50 border-b border-slate-200">
                                           <td colSpan="3" className="text-center font-bold py-2 uppercase text-xs tracking-widest text-emerald-800">{cat}</td>
@@ -443,7 +487,7 @@
                                         ))}
                                       </React.Fragment>
                                     )}
-                                    {(!recipe.ingredients || recipe.ingredients.filter(i => i.id !== 'META_YIELD' && i.itemName !== 'META_STATUS').length === 0) && (
+                                    {(!recipe.ingredients || recipe.ingredients.filter(i => i.id !== 'META_YIELD' && i.itemName !== 'META_STATUS' && i.itemName !== 'META_CATEGORY_ORDER' && i.itemName !== 'META_MENU_CATEGORY').length === 0) && (
                                       <tr><td colSpan="3" className="py-4 text-center italic text-slate-400">Belum ada rincian bahan</td></tr>
                                     )}
                                   </tbody>

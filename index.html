@@ -194,7 +194,9 @@
       const [isRefreshing, setIsRefreshing] = useState(false);
       const [salesSimulation, setSalesSimulation] = useState({});
       const [searchKatalog, setSearchKatalog] = useState('');
+      const [filterKatalogCategory, setFilterKatalogCategory] = useState('');
       const [searchCosting, setSearchCosting] = useState('');
+      const [filterCostingCategory, setFilterCostingCategory] = useState('');
       const [searchSimulasi, setSearchSimulasi] = useState('');
       const [selectedKatalogMenu, setSelectedKatalogMenu] = useState(null);
       const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -230,14 +232,22 @@
                 const ings = Array.isArray(r.ingredients) ? r.ingredients : [];
                 const yieldMeta = ings.find(i => i.id === 'META_YIELD');
                 const statusMeta = ings.find(i => i.itemName === 'META_STATUS');
+                const catOrderMeta = ings.find(i => i.itemName === 'META_CATEGORY_ORDER');
+                const menuCatMeta = ings.find(i => i.itemName === 'META_MENU_CATEGORY');
+                let customCategoryOrder = [];
+                if (catOrderMeta && catOrderMeta.quantity) {
+                  try { customCategoryOrder = JSON.parse(catOrderMeta.quantity); } catch (e) { }
+                }
                 return {
                   ...r,
                   isActive: statusMeta ? (String(statusMeta.quantity) === 'true') : true,
+                  customCategoryOrder: customCategoryOrder,
+                  menuCategory: menuCatMeta ? menuCatMeta.quantity : '',
                   recipeType: yieldMeta ? (yieldMeta.type || 'final') : 'final',
                   yieldQty: yieldMeta ? formatQtyInput(yieldMeta.qty) : "1",
                   yieldUnit: yieldMeta ? yieldMeta.unit : "porsi",
                   imageUrl: r.imageUrl || '',
-                  ingredients: ings.filter(i => i.id !== 'META_YIELD' && i.itemName !== 'META_STATUS').map(i => ({ ...i, quantity: formatQtyInput(i.quantity) }))
+                  ingredients: ings.filter(i => i.id !== 'META_YIELD' && i.itemName !== 'META_STATUS' && i.itemName !== 'META_CATEGORY_ORDER' && i.itemName !== 'META_MENU_CATEGORY').map(i => ({ ...i, quantity: formatQtyInput(i.quantity) }))
                 };
               });
               setRecipes(loadedRecipes);
@@ -282,14 +292,22 @@
                     const ings = Array.isArray(r.ingredients) ? r.ingredients : [];
                     const yieldMeta = ings.find(i => i.id === 'META_YIELD');
                     const statusMeta = ings.find(i => i.itemName === 'META_STATUS');
+                    const catOrderMeta = ings.find(i => i.itemName === 'META_CATEGORY_ORDER');
+                    const menuCatMeta = ings.find(i => i.itemName === 'META_MENU_CATEGORY');
+                    let customCategoryOrder = [];
+                    if (catOrderMeta && catOrderMeta.quantity) {
+                      try { customCategoryOrder = JSON.parse(catOrderMeta.quantity); } catch (e) { }
+                    }
                     return {
                       ...r,
                       isActive: statusMeta ? (String(statusMeta.quantity) === 'true') : true,
+                      customCategoryOrder: customCategoryOrder,
+                      menuCategory: menuCatMeta ? menuCatMeta.quantity : '',
                       recipeType: yieldMeta ? (yieldMeta.type || 'final') : 'final',
                       yieldQty: yieldMeta ? formatQtyInput(yieldMeta.qty) : "1",
                       yieldUnit: yieldMeta ? yieldMeta.unit : "porsi",
                       imageUrl: r.imageUrl || '',
-                      ingredients: ings.filter(i => i.id !== 'META_YIELD' && i.itemName !== 'META_STATUS').map(i => ({ ...i, quantity: formatQtyInput(i.quantity) }))
+                      ingredients: ings.filter(i => i.id !== 'META_YIELD' && i.itemName !== 'META_STATUS' && i.itemName !== 'META_CATEGORY_ORDER' && i.itemName !== 'META_MENU_CATEGORY').map(i => ({ ...i, quantity: formatQtyInput(i.quantity) }))
                     };
                   });
                   setRecipes(loadedRecipes);
@@ -415,8 +433,9 @@
           if (!items.has(nameLower)) items.set(nameLower, { name: p.itemName, unit: p.unit });
         });
 
-        // Tambahkan resep sebagai bahan jadi
+        // Tambahkan resep sebagai bahan jadi (hanya Bahan 1/2 Jadi)
         recipes.forEach(r => {
+          if (r.recipeType !== 'sub') return;
           const resepName = `[Resep] ${r.menuName}`;
           if (!items.has(resepName.toLowerCase())) {
             const yieldData = getRecipeYield(r);
@@ -861,7 +880,7 @@
           alert('Silakan ketik nama menu baru terlebih dahulu di kolom pengisian!');
           return;
         }
-        const recipeData = { id: Date.now(), menuName: newMenuName, targetMarginPercent: 30, yieldQty: 1, yieldUnit: 'porsi', recipeType: 'final', isActive: true, imageUrl: '', ingredients: [] };
+        const recipeData = { id: Date.now(), menuName: newMenuName, targetMarginPercent: 30, yieldQty: 1, yieldUnit: 'porsi', recipeType: 'final', isActive: true, menuCategory: '', imageUrl: '', ingredients: [] };
         setRecipes([...recipes, recipeData]);
         sendApiRequest('addRecipe', recipeData);
         setNewMenuName('');
@@ -892,7 +911,9 @@
             ingredients: [
               ...cleanedIngredients,
               { id: 'META_YIELD', qty: parsedYield, unit: recipe.yieldUnit || 'porsi', type: recipe.recipeType || 'final' },
-              { itemName: 'META_STATUS', quantity: recipe.isActive === false ? 'false' : 'true' }
+              { itemName: 'META_STATUS', quantity: recipe.isActive === false ? 'false' : 'true' },
+              { itemName: 'META_CATEGORY_ORDER', quantity: JSON.stringify(recipe.customCategoryOrder || []) },
+              { itemName: 'META_MENU_CATEGORY', quantity: recipe.menuCategory || '' }
             ]
           };
 
@@ -956,6 +977,17 @@
         setRecipes(newRecipes);
       };
 
+      const handleEditIngredientField = (recipeId, ingId, field, value) => {
+        const newRecipes = recipes.map(r => {
+          if (r.id === recipeId) {
+            const updatedIngredients = r.ingredients.map(i => i.id === ingId ? { ...i, [field]: value } : i);
+            return { ...r, ingredients: updatedIngredients };
+          }
+          return r;
+        });
+        setRecipes(newRecipes);
+      };
+
       const handleUpdateYield = (id, qty, unit) => {
         const newRecipes = recipes.map(r => r.id === id ? { ...r, yieldQty: qty, yieldUnit: unit } : r);
         setRecipes(newRecipes);
@@ -1003,7 +1035,12 @@
       // DRAG AND DROP INGREDIENTS
       // ==========================================
       const handleDragStart = (e, recipeId, ingId, sourceCat) => {
-        e.dataTransfer.setData('text/plain', JSON.stringify({ recipeId, ingId, sourceCat }));
+        e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'ingredient', recipeId, ingId, sourceCat }));
+        e.dataTransfer.effectAllowed = 'move';
+      };
+
+      const handleCategoryDragStart = (e, recipeId, cat) => {
+        e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'category', recipeId, cat }));
         e.dataTransfer.effectAllowed = 'move';
       };
 
@@ -1012,6 +1049,35 @@
         try {
           const data = JSON.parse(e.dataTransfer.getData('text/plain'));
           if (data.recipeId !== targetRecipeId) return;
+
+          if (data.type === 'category') {
+            const newRecipes = recipes.map(r => {
+              if (r.id !== targetRecipeId) return r;
+              const currentOrder = r.customCategoryOrder || [];
+              const activeCats = Object.keys(r.ingredients.reduce((acc, ing) => {
+                const c = (ing.category || 'OTHERS').toUpperCase();
+                acc[c] = true;
+                return acc;
+              }, {}));
+
+              let order = [...new Set([...currentOrder, ...activeCats])];
+
+              const dragIdx = order.indexOf(data.cat);
+              let dropIdx = order.indexOf(targetCat);
+
+              if (dragIdx !== -1) {
+                if (dropIdx === -1) dropIdx = order.length;
+                const [dragged] = order.splice(dragIdx, 1);
+                order.splice(dropIdx, 0, dragged);
+              }
+
+              return { ...r, customCategoryOrder: order };
+            });
+            setRecipes(newRecipes);
+            const updatedRecipe = newRecipes.find(r => r.id === targetRecipeId);
+            handleSaveRecipe(targetRecipeId, updatedRecipe);
+            return;
+          }
 
           const newRecipes = recipes.map(r => {
             if (r.id !== targetRecipeId) return r;
@@ -1037,6 +1103,35 @@
         try {
           const data = JSON.parse(e.dataTransfer.getData('text/plain'));
           if (data.recipeId !== targetRecipeId) return;
+
+          if (data.type === 'category') {
+            // Re-use category drop logic
+            const newRecipes = recipes.map(r => {
+              if (r.id !== targetRecipeId) return r;
+              const currentOrder = r.customCategoryOrder || [];
+              const activeCats = Object.keys(r.ingredients.reduce((acc, ing) => {
+                const c = (ing.category || 'OTHERS').toUpperCase();
+                acc[c] = true;
+                return acc;
+              }, {}));
+
+              let order = [...new Set([...currentOrder, ...activeCats])];
+              const dragIdx = order.indexOf(data.cat);
+              let dropIdx = order.indexOf(targetCat);
+
+              if (dragIdx !== -1) {
+                if (dropIdx === -1) dropIdx = order.length;
+                const [dragged] = order.splice(dragIdx, 1);
+                order.splice(dropIdx, 0, dragged);
+              }
+
+              return { ...r, customCategoryOrder: order };
+            });
+            setRecipes(newRecipes);
+            const updatedRecipe = newRecipes.find(r => r.id === targetRecipeId);
+            handleSaveRecipe(targetRecipeId, updatedRecipe);
+            return;
+          }
 
           const newRecipes = recipes.map(r => {
             if (r.id !== targetRecipeId) return r;
@@ -1435,8 +1530,8 @@
 
                 {/* List Menu */}
 
-                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200">
-                  <div className="relative">
+                <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row gap-4">
+                  <div className="relative flex-1">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                       <i className="fas fa-search text-slate-400"></i>
                     </div>
@@ -1448,6 +1543,27 @@
                       onChange={(e) => setSearchCosting(e.target.value)}
                     />
                   </div>
+                  <div className="relative w-full sm:w-64 shrink-0">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <i className="fas fa-tags text-slate-400"></i>
+                    </div>
+                    <select
+                      className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-emerald-500 font-medium transition-colors appearance-none"
+                      value={filterCostingCategory}
+                      onChange={(e) => setFilterCostingCategory(e.target.value)}
+                    >
+                      <option value="">Semua Kategori</option>
+                      {Array.from(new Set(recipes.map(r => r.menuCategory).filter(Boolean))).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    <i className="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                  </div>
+                  <datalist id="menu-categories-list">
+                    {Array.from(new Set(recipes.map(r => r.menuCategory).filter(Boolean))).map(cat => (
+                      <option key={cat} value={cat} />
+                    ))}
+                  </datalist>
                 </div>
 
                 {recipes.length === 0 && (
@@ -1466,7 +1582,7 @@
                       <i className="fas fa-store"></i> Menu Jual: {recipes.filter(r => r.recipeType !== 'sub').length}
                     </span>
                     <span className="bg-white border border-amber-200 text-amber-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
-                      <i className="fas fa-box-open"></i> Setengah Jadi: {recipes.filter(r => r.recipeType === 'sub').length}
+                      <i className="fas fa-box-open"></i> Bahan 1/2 Jadi: {recipes.filter(r => r.recipeType === 'sub').length}
                     </span>
                     <span className="bg-white border border-sky-200 text-sky-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
                       <i className="fas fa-check-circle"></i> Aktif: {recipes.filter(r => r.isActive !== false).length}
@@ -1478,7 +1594,7 @@
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                  {[...recipes].filter(r => r.menuName.toLowerCase().includes(searchCosting.toLowerCase())).sort((a, b) => (a.isActive === false ? 1 : 0) - (b.isActive === false ? 1 : 0)).map(recipe => {
+                  {[...recipes].filter(r => r.menuName.toLowerCase().includes(searchCosting.toLowerCase()) && (!filterCostingCategory || r.menuCategory === filterCostingCategory)).sort((a, b) => (a.isActive === false ? 1 : 0) - (b.isActive === false ? 1 : 0)).map(recipe => {
                     const hppBahan = calculateRecipeHPP(recipe.id);
                     const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
                     const profitPerPorsi = hargaJualIdeal - hppBahan;
@@ -1509,12 +1625,21 @@
                           <div className="absolute top-3 left-3 flex flex-col gap-2">
                             {recipe.recipeType === 'sub' && (
                               <span className="bg-amber-100/90 backdrop-blur-sm text-amber-700 text-[10px] font-bold px-2 py-1 rounded shadow-sm uppercase tracking-wider border border-amber-200/50 flex items-center">
-                                <i className="fas fa-box-open mr-1"></i> Bahan Setengah Jadi
+                                <i className="fas fa-box-open mr-1"></i> Bahan 1/2 Jadi
                               </span>
                             )}
                             {recipe.isActive === false && (
                               <span className="bg-slate-800/90 backdrop-blur-sm text-slate-100 text-[10px] font-bold px-2 py-1 rounded shadow-sm uppercase tracking-wider border border-slate-700/50 flex items-center">
                                 <i className="fas fa-power-off mr-1"></i> Nonaktif
+                              </span>
+                            )}
+                            {recipe.instructions ? (
+                              <span className="bg-sky-100/90 backdrop-blur-sm text-sky-700 text-[10px] font-bold px-2 py-1 rounded shadow-sm uppercase tracking-wider border border-sky-200/50 flex items-center" title="Recipe Card sudah diisi">
+                                <i className="fas fa-book-open mr-1"></i> Ada Resep
+                              </span>
+                            ) : (
+                              <span className="bg-rose-100/90 backdrop-blur-sm text-rose-700 text-[10px] font-bold px-2 py-1 rounded shadow-sm uppercase tracking-wider border border-rose-200/50 flex items-center" title="Recipe Card belum diisi">
+                                <i className="fas fa-exclamation-triangle mr-1"></i> Tanpa Resep
                               </span>
                             )}
                           </div>
@@ -1578,10 +1703,28 @@
                                   onBlur={() => handleSaveRecipe(recipe.id)}
                                   title="Klik untuk mengubah nama menu"
                                 />
+                                <div className="flex items-center gap-2 px-2 mt-1 w-full max-w-sm">
+                                  <div className="relative w-full">
+                                    <i className="fas fa-tags absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                    <input
+                                      type="text"
+                                      list="menu-categories-list"
+                                      className="text-xs font-medium text-slate-600 bg-slate-100/80 border border-transparent hover:border-slate-300 focus:border-emerald-500 focus:bg-white outline-none rounded pl-7 pr-2 py-1.5 w-full transition-colors"
+                                      placeholder="+ Kategori Menu (opsional)"
+                                      defaultValue={recipe.menuCategory || ''}
+                                      onBlur={(e) => {
+                                        const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, menuCategory: e.target.value } : r);
+                                        setRecipes(newRecipes);
+                                        handleSaveRecipe(recipe.id, newRecipes.find(r => r.id === recipe.id));
+                                      }}
+                                      onKeyDown={(e) => { if (e.key === 'Enter') e.target.blur(); }}
+                                    />
+                                  </div>
+                                </div>
                                 <div className="flex flex-wrap items-center gap-2 px-2 mt-1">
                                   {recipe.recipeType === 'sub' && (
                                     <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider border border-amber-200">
-                                      <i className="fas fa-box-open mr-1"></i> Bahan Setengah Jadi
+                                      <i className="fas fa-box-open mr-1"></i> Bahan 1/2 Jadi
                                     </span>
                                   )}
                                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider border ${maxPortions > 0 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-rose-100 text-rose-700 border-rose-200'}`} title="Berdasarkan stok bahan baku yang tersedia di inventori">
@@ -1632,34 +1775,43 @@
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
                                       {(() => {
-                                        const categoryOrder = ['MAIN INGREDIENTS', 'CONDIMENTS', 'SEASONING', 'BATTER MIX', 'THICKENING MIX', 'MARINATION', 'HERBS', 'OTHERS'];
-                                        const initialGroups = categoryOrder.reduce((acc, cat) => ({ ...acc, [cat]: [] }), {});
-
                                         const groupedIngredients = recipe.ingredients.reduce((acc, ing) => {
                                           const cat = (ing.category || 'OTHERS').toUpperCase();
                                           if (!acc[cat]) acc[cat] = [];
                                           acc[cat].push(ing);
                                           return acc;
-                                        }, initialGroups);
+                                        }, {});
 
                                         const sortedCategories = Object.keys(groupedIngredients).sort((a, b) => {
-                                          let idxA = categoryOrder.indexOf(a);
-                                          let idxB = categoryOrder.indexOf(b);
-                                          if (idxA === -1) idxA = 99;
-                                          if (idxB === -1) idxB = 99;
-                                          if (idxA !== idxB) return idxA - idxB;
-                                          return a.localeCompare(b);
+                                          const orderArray = recipe.customCategoryOrder || [];
+                                          let idxA = orderArray.indexOf(a);
+                                          let idxB = orderArray.indexOf(b);
+
+                                          if (idxA === -1 && idxB === -1) {
+                                            if (a === 'OTHERS') return 1;
+                                            if (b === 'OTHERS') return -1;
+                                            return a.localeCompare(b);
+                                          }
+                                          if (idxA === -1) return 1;
+                                          if (idxB === -1) return -1;
+                                          return idxA - idxB;
                                         });
+
+                                        const uniqueRecipeCats = Object.keys(groupedIngredients);
 
                                         return sortedCategories.map(cat => (
                                           <React.Fragment key={cat}>
                                             <tr
-                                              className="bg-slate-100/50 transition-colors"
+                                              className="bg-slate-100/50 transition-colors cursor-grab active:cursor-grabbing group"
+                                              draggable
+                                              onDragStart={(e) => handleCategoryDragStart(e, recipe.id, cat)}
                                               onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                                               onDrop={(e) => handleDropOnCategory(e, recipe.id, cat)}
+                                              title="Tarik header kategori ini untuk mengubah urutan"
                                             >
                                               <td colSpan={showKitchenConfig ? "6" : "4"} className="py-2 px-3 font-black text-[10px] text-slate-500 uppercase tracking-widest bg-slate-100/80 border-y border-slate-200">
                                                 <div className="flex items-center gap-2">
+                                                  <i className="fas fa-grip-vertical text-slate-300 group-hover:text-emerald-500 transition-colors"></i>
                                                   <i className="fas fa-folder-open text-emerald-500"></i> {cat}
                                                 </div>
                                               </td>
@@ -1685,9 +1837,50 @@
                                                   onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
                                                   onDrop={(e) => handleDropOnIngredient(e, recipe.id, ing.id, cat)}
                                                 >
-                                                  <td className="py-2 font-medium px-2 whitespace-nowrap flex items-center gap-2">
-                                                    <i className="fas fa-grip-vertical text-slate-300 group-hover:text-emerald-500 cursor-grab active:cursor-grabbing px-1" title="Tarik untuk memindahkan"></i>
-                                                    {ing.itemName}
+                                                  <td className="py-2 font-medium px-2 whitespace-nowrap">
+                                                    <div className="flex items-center gap-1">
+                                                      <i className="fas fa-grip-vertical text-slate-300 group-hover:text-emerald-500 cursor-grab active:cursor-grabbing px-1 shrink-0" title="Tarik untuk memindahkan"></i>
+                                                      <div className="flex flex-col gap-1 w-full">
+                                                        <input
+                                                          type="text"
+                                                          list={`ing-list-${recipe.id}-${ing.id}`}
+                                                          className="w-full min-w-[100px] p-1 border border-transparent rounded text-sm outline-none hover:border-slate-200 focus:border-emerald-500 focus:bg-white bg-transparent font-medium transition-colors"
+                                                          value={ing.itemName}
+                                                          onChange={(e) => handleEditIngredientField(recipe.id, ing.id, 'itemName', e.target.value)}
+                                                          onBlur={() => handleSaveRecipe(recipe.id)}
+                                                          title="Klik untuk mengedit nama bahan"
+                                                        />
+                                                        <datalist id={`ing-list-${recipe.id}-${ing.id}`}>
+                                                          {uniqueItems.map((item, idx) => <option key={idx} value={item.name} />)}
+                                                        </datalist>
+                                                        <div className="flex items-center">
+                                                          <input
+                                                            type="text"
+                                                            list={`cat-list-${recipe.id}`}
+                                                            className="w-full min-w-[100px] text-[9px] font-bold uppercase tracking-wider px-1 py-0.5 rounded border border-transparent bg-transparent text-slate-400 outline-none hover:border-slate-200 focus:border-emerald-500 focus:bg-white transition-colors"
+                                                            defaultValue={(ing.category || 'OTHERS').toUpperCase()}
+                                                            onBlur={(e) => {
+                                                              const newCat = e.target.value === 'OTHERS' ? '' : e.target.value;
+                                                              handleEditIngredientField(recipe.id, ing.id, 'category', newCat);
+                                                              handleSaveRecipe(recipe.id, {
+                                                                ...recipe,
+                                                                ingredients: recipe.ingredients.map(i => i.id === ing.id ? { ...i, category: newCat } : i)
+                                                              });
+                                                            }}
+                                                            onKeyDown={(e) => {
+                                                              if (e.key === 'Enter') e.target.blur();
+                                                            }}
+                                                            title="Ketik atau pilih kategori bahan (cth: SUSHI RICE)"
+                                                            placeholder="KATEGORI"
+                                                          />
+                                                          <datalist id={`cat-list-${recipe.id}`}>
+                                                            {uniqueRecipeCats.map(c => (
+                                                              <option key={c} value={c} />
+                                                            ))}
+                                                          </datalist>
+                                                        </div>
+                                                      </div>
+                                                    </div>
                                                   </td>
                                                   <td className="py-2 text-right px-2 whitespace-nowrap">
                                                     <input
@@ -1801,7 +1994,7 @@
                                         }}
                                       >
                                         <option value="final">Menu Akhir (Jual)</option>
-                                        <option value="sub">Bahan Setengah Jadi</option>
+                                        <option value="sub">Bahan 1/2 Jadi</option>
                                       </select>
                                     </div>
                                     <div className="flex flex-col gap-2">
@@ -1837,13 +2030,13 @@
                               </div>
 
                               {/* Kanan: Profitabilitas */}
-                              <div className="p-5 bg-slate-800 text-white">
-                                <h4 className="font-bold text-emerald-400 mb-4 flex items-center gap-2">
+                              <div className="p-5 bg-emerald-50 text-slate-800 border-l border-emerald-100">
+                                <h4 className="font-bold text-emerald-700 mb-4 flex items-center gap-2">
                                   <i className="fas fa-bullseye"></i> Analisis Profitabilitas
                                 </h4>
 
-                                <div className="mb-4 bg-slate-700/50 p-4 rounded-xl border border-slate-600">
-                                  <label className="text-xs font-bold text-slate-300 uppercase mb-2 block">Foto Menu (Pilih dari Perangkat)</label>
+                                <div className="mb-4 bg-white p-4 rounded-xl border border-emerald-200 shadow-sm">
+                                  <label className="text-xs font-bold text-emerald-800 uppercase mb-2 block">Foto Menu (Pilih dari Perangkat)</label>
 
                                   <div className="relative mb-3">
                                     <input
@@ -1853,16 +2046,16 @@
                                       disabled={isUploadingImage}
                                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                                     />
-                                    <div className={`w-full bg-slate-800 border-2 border-dashed ${isUploadingImage ? 'border-emerald-500' : 'border-slate-500'} rounded-lg p-4 text-center transition-colors flex flex-col items-center justify-center gap-2`}>
+                                    <div className={`w-full bg-emerald-50/50 border-2 border-dashed ${isUploadingImage ? 'border-emerald-500' : 'border-emerald-300'} rounded-lg p-4 text-center transition-colors flex flex-col items-center justify-center gap-2 hover:bg-emerald-100/50 group`}>
                                       {isUploadingImage ? (
                                         <>
-                                          <i className="fas fa-spinner fa-spin text-emerald-400 text-2xl"></i>
-                                          <span className="text-sm font-medium text-emerald-400">Sedang mengunggah...</span>
+                                          <i className="fas fa-spinner fa-spin text-emerald-600 text-2xl"></i>
+                                          <span className="text-sm font-medium text-emerald-600">Sedang mengunggah...</span>
                                         </>
                                       ) : (
                                         <>
-                                          <i className="fas fa-cloud-upload-alt text-slate-400 text-2xl group-hover:text-emerald-400"></i>
-                                          <span className="text-sm font-medium text-slate-400">Pilih gambar atau tarik ke sini</span>
+                                          <i className="fas fa-cloud-upload-alt text-emerald-400 text-2xl group-hover:text-emerald-600 transition-colors"></i>
+                                          <span className="text-sm font-medium text-slate-600">Pilih gambar atau tarik ke sini</span>
                                           <span className="text-xs text-slate-500">(Otomatis dikompres & disimpan di Spreadsheet)</span>
                                         </>
                                       )}
@@ -1870,14 +2063,14 @@
                                   </div>
 
                                   {recipe.imageUrl && (
-                                    <div className="w-full h-40 rounded-lg overflow-hidden border border-slate-600 bg-slate-800 flex items-center justify-center relative group mt-2">
+                                    <div className="w-full h-40 rounded-lg overflow-hidden border border-emerald-200 bg-white flex items-center justify-center relative group mt-2 shadow-inner">
                                       <img src={recipe.imageUrl} alt={recipe.menuName} className="w-full h-full object-contain" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }} />
-                                      <div className="text-slate-500 text-xs hidden font-medium">Gambar Tidak Tersedia</div>
+                                      <div className="text-slate-400 text-xs hidden font-medium">Gambar Tidak Tersedia</div>
 
                                       {/* Tombol hapus gambar */}
                                       <button
                                         onClick={() => handleSaveRecipe(recipe.id, { ...recipe, imageUrl: '' })}
-                                        className="absolute top-2 right-2 bg-red-500/80 hover:bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                        className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md"
                                         title="Hapus Gambar"
                                       >
                                         <i className="fas fa-trash text-sm"></i>
@@ -1887,50 +2080,50 @@
                                 </div>
 
                                 <div className="space-y-4">
-                                  <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600 flex justify-between items-center">
+                                  <div className="bg-white p-4 rounded-xl border border-emerald-200 shadow-sm flex justify-between items-center">
                                     <div>
-                                      <p className="text-sm text-slate-300 font-medium">Target Margin Profit (%)</p>
-                                      <p className="text-xs text-slate-400 mt-1">Sisa persentase setelah dikurangi HPP</p>
+                                      <p className="text-sm text-emerald-800 font-bold">Target Margin Profit (%)</p>
+                                      <p className="text-xs text-slate-500 mt-1">Sisa persentase setelah dikurangi HPP</p>
                                     </div>
-                                    <div className="flex items-center gap-2 bg-slate-800 rounded-lg p-1 border border-slate-600">
+                                    <div className="flex items-center gap-2 bg-emerald-50 rounded-lg p-1 border border-emerald-200">
                                       <input
                                         type="number"
                                         min="1" max="99"
-                                        className="w-16 bg-transparent text-center text-xl font-bold text-white outline-none"
+                                        className="w-16 bg-transparent text-center text-xl font-black text-emerald-700 outline-none"
                                         value={recipe.targetMarginPercent}
                                         onChange={e => handleUpdateMargin(recipe.id, e.target.value)}
                                       />
-                                      <span className="text-slate-400 pr-2 font-bold">%</span>
+                                      <span className="text-emerald-600 pr-2 font-bold">%</span>
                                     </div>
                                   </div>
 
                                   <div className="grid grid-cols-2 gap-4">
-                                    <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-xl">
-                                      <p className="text-[10px] text-emerald-300 font-medium uppercase tracking-wider mb-1">Rekomendasi Harga Jual</p>
-                                      <p className="text-xl md:text-2xl font-black text-emerald-400">{formatRp(hargaJualIdeal)}</p>
-                                      <p className="text-xs text-emerald-400/70 mt-1">Agar margin {recipe.targetMarginPercent}%</p>
+                                    <div className="bg-emerald-100/50 border border-emerald-200 p-4 rounded-xl shadow-sm">
+                                      <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider mb-1">Rekomendasi Harga Jual</p>
+                                      <p className="text-xl md:text-2xl font-black text-emerald-700">{formatRp(hargaJualIdeal)}</p>
+                                      <p className="text-xs text-emerald-600/80 mt-1">Agar margin {recipe.targetMarginPercent}%</p>
                                     </div>
-                                    <div className="bg-sky-500/10 border border-sky-500/30 p-4 rounded-xl">
-                                      <p className="text-[10px] text-sky-300 font-medium uppercase tracking-wider mb-1">Profit Kotor / Porsi</p>
-                                      <p className="text-xl md:text-2xl font-black text-sky-400">{formatRp(profitPerPorsi)}</p>
-                                      <p className="text-xs text-sky-400/70 mt-1">Sisa bersih dari resep</p>
+                                    <div className="bg-sky-50 border border-sky-200 p-4 rounded-xl shadow-sm">
+                                      <p className="text-[10px] text-sky-600 font-bold uppercase tracking-wider mb-1">Profit Kotor / Porsi</p>
+                                      <p className="text-xl md:text-2xl font-black text-sky-700">{formatRp(profitPerPorsi)}</p>
+                                      <p className="text-xs text-sky-600/80 mt-1">Sisa bersih dari resep</p>
                                     </div>
                                   </div>
 
-                                  <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 mt-4">
-                                    <p className="text-sm font-semibold text-amber-400 mb-2 flex items-center gap-2">
+                                  <div className="bg-white p-4 rounded-xl border border-emerald-200 shadow-sm mt-4">
+                                    <p className="text-sm font-bold text-amber-600 mb-2 flex items-center gap-2">
                                       <i className="fas fa-chart-line"></i> Target Balik Modal (BEP)
                                     </p>
-                                    <p className="text-slate-300 text-sm mb-2">Jika Anda hanya menjual menu ini, Anda harus menjual:</p>
+                                    <p className="text-slate-600 text-sm mb-2 font-medium">Jika Anda hanya menjual menu ini, Anda harus menjual:</p>
                                     <div className="flex items-end gap-2">
-                                      <span className="text-4xl font-black text-white">{formatNum(bepPorsi)}</span>
-                                      <span className="text-lg font-medium text-slate-400 mb-1">Porsi / Bulan</span>
+                                      <span className="text-4xl font-black text-slate-800">{formatNum(bepPorsi)}</span>
+                                      <span className="text-lg font-bold text-slate-500 mb-1">Porsi / Bulan</span>
                                     </div>
                                     <p className="text-xs text-slate-500 mt-2">({formatNum(bepPorsi)} porsi x {formatRp(profitPerPorsi)} = {formatRp(bepPorsi * profitPerPorsi)})</p>
                                   </div>
 
-                                  <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 mt-4">
-                                    <p className="text-sm font-semibold text-amber-400 mb-3 flex items-center justify-between">
+                                  <div className="bg-white p-4 rounded-xl border border-emerald-200 shadow-sm mt-4">
+                                    <p className="text-sm font-bold text-emerald-700 mb-3 flex items-center justify-between">
                                       <span className="flex items-center gap-2"><i className="fas fa-list-ol"></i> Instruksi Memasak (Recipe Card)</span>
                                     </p>
                                     {(() => {
@@ -1939,7 +2132,7 @@
                                         return (
                                           <div>
                                             <textarea
-                                              className="w-full bg-slate-800 text-white p-3 rounded-lg border border-slate-600 outline-none focus:border-emerald-500 font-medium text-sm min-h-[120px] mb-3"
+                                              className="w-full bg-slate-50 text-slate-800 p-3 rounded-lg border border-slate-200 outline-none focus:border-emerald-500 font-medium text-sm min-h-[120px] mb-3 transition-colors"
                                               placeholder="1. Siapkan bahan..."
                                               value={recipe.instructions || ''}
                                               onChange={e => {
@@ -1953,7 +2146,7 @@
                                               const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, instructions: newInst } : r);
                                               setRecipes(newRecipes);
                                               handleSaveRecipe(recipe.id, { ...recipe, instructions: newInst });
-                                            }} className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg transition-colors w-full flex items-center justify-center gap-2">
+                                            }} className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg transition-colors w-full flex items-center justify-center gap-2 shadow-sm">
                                               <i className="fas fa-magic"></i> Ubah ke Format Kartu Resep Profesional
                                             </button>
                                           </div>
@@ -1971,24 +2164,24 @@
                                         <div className="space-y-4">
                                           <div className="grid grid-cols-3 gap-2">
                                             <div>
-                                              <label className="text-[10px] text-slate-400 uppercase font-bold">Prep Time</label>
-                                              <input type="text" className="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none focus:border-emerald-500" value={inst.prepTime || ''} onChange={e => updateInst({ prepTime: e.target.value })} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="2 Min" />
+                                              <label className="text-[10px] text-emerald-700 uppercase font-bold">Prep Time</label>
+                                              <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 text-sm text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" value={inst.prepTime || ''} onChange={e => updateInst({ prepTime: e.target.value })} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="2 Min" />
                                             </div>
                                             <div>
-                                              <label className="text-[10px] text-slate-400 uppercase font-bold">Cook Time</label>
-                                              <input type="text" className="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none focus:border-emerald-500" value={inst.cookTime || ''} onChange={e => updateInst({ cookTime: e.target.value })} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="6 Min" />
+                                              <label className="text-[10px] text-emerald-700 uppercase font-bold">Cook Time</label>
+                                              <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 text-sm text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" value={inst.cookTime || ''} onChange={e => updateInst({ cookTime: e.target.value })} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="6 Min" />
                                             </div>
                                             <div>
-                                              <label className="text-[10px] text-slate-400 uppercase font-bold">Tools</label>
-                                              <input type="text" className="w-full bg-slate-800 border border-slate-600 rounded p-1.5 text-sm text-white outline-none focus:border-emerald-500" value={inst.tools || ''} onChange={e => updateInst({ tools: e.target.value })} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="Wok, Deep Frying" />
+                                              <label className="text-[10px] text-emerald-700 uppercase font-bold">Tools</label>
+                                              <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded p-1.5 text-sm text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" value={inst.tools || ''} onChange={e => updateInst({ tools: e.target.value })} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="Wok, Deep Frying" />
                                             </div>
                                           </div>
 
                                           <div className="space-y-3">
                                             {(inst.phases || []).map((phase, pIdx) => (
-                                              <div key={pIdx} className="border border-slate-700 rounded-lg p-2 bg-slate-800/50">
+                                              <div key={pIdx} className="border border-emerald-200 rounded-lg p-2 bg-emerald-50/50">
                                                 <div className="flex gap-2 mb-2">
-                                                  <input type="text" className="flex-1 bg-slate-900 border border-slate-600 rounded p-1.5 text-xs text-amber-400 font-bold uppercase outline-none focus:border-amber-500" value={phase.phase} onChange={e => {
+                                                  <input type="text" className="flex-1 bg-white border border-emerald-200 rounded p-1.5 text-xs text-emerald-700 font-black uppercase outline-none focus:border-emerald-500 transition-colors" value={phase.phase} onChange={e => {
                                                     const newPhases = [...inst.phases];
                                                     newPhases[pIdx].phase = e.target.value;
                                                     updateInst({ phases: newPhases });
@@ -1997,31 +2190,31 @@
                                                     const newPhases = inst.phases.filter((_, i) => i !== pIdx);
                                                     updateInst({ phases: newPhases });
                                                     handleSaveRecipe(recipe.id, { ...recipe, instructions: { ...inst, phases: newPhases } });
-                                                  }} className="text-red-400 p-1.5 hover:bg-red-500/20 rounded transition-colors" title="Hapus Fase"><i className="fas fa-trash"></i></button>
+                                                  }} className="text-rose-500 p-1.5 hover:bg-rose-100 rounded transition-colors" title="Hapus Fase"><i className="fas fa-trash"></i></button>
                                                 </div>
 
                                                 <div className="overflow-x-auto">
                                                   <table className="w-full text-xs text-left min-w-[400px]">
                                                     <thead>
-                                                      <tr className="text-slate-400 border-b border-slate-700">
-                                                        <th className="pb-1 font-semibold">Process</th>
-                                                        <th className="pb-1 min-w-[70px] font-semibold text-center">Temp</th>
-                                                        <th className="pb-1 min-w-[70px] font-semibold text-center">Time</th>
-                                                        <th className="pb-1 font-semibold">Notes</th>
+                                                      <tr className="text-emerald-700 border-b border-emerald-200">
+                                                        <th className="pb-1 font-bold">Process</th>
+                                                        <th className="pb-1 min-w-[70px] font-bold text-center">Temp</th>
+                                                        <th className="pb-1 min-w-[70px] font-bold text-center">Time</th>
+                                                        <th className="pb-1 font-bold">Notes</th>
                                                         <th className="pb-1 w-6"></th>
                                                       </tr>
                                                     </thead>
-                                                    <tbody className="divide-y divide-slate-700/50">
+                                                    <tbody className="divide-y divide-emerald-100">
                                                       {(phase.steps || []).map((step, sIdx) => (
                                                         <tr key={sIdx}>
-                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-white outline-none focus:border-emerald-500" value={step.process} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].process = e.target.value; updateInst({ phases: newP }); }} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="Marinasi ikan..." /></td>
-                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-white text-center outline-none focus:border-emerald-500" value={step.temp} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].temp = e.target.value; updateInst({ phases: newP }); }} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="170°C" /></td>
-                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-white text-center outline-none focus:border-emerald-500" value={step.time} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].time = e.target.value; updateInst({ phases: newP }); }} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="4 min" /></td>
-                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-white outline-none focus:border-emerald-500" value={step.notes} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].notes = e.target.value; updateInst({ phases: newP }); }} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="Hingga slightly golden..." /></td>
+                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" value={step.process} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].process = e.target.value; updateInst({ phases: newP }); }} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="Marinasi ikan..." /></td>
+                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-800 font-medium text-center outline-none focus:border-emerald-500 transition-colors" value={step.temp} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].temp = e.target.value; updateInst({ phases: newP }); }} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="170°C" /></td>
+                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-800 font-medium text-center outline-none focus:border-emerald-500 transition-colors" value={step.time} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].time = e.target.value; updateInst({ phases: newP }); }} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="4 min" /></td>
+                                                          <td className="py-1 pr-1"><input type="text" className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-800 font-medium outline-none focus:border-emerald-500 transition-colors" value={step.notes} onChange={e => { const newP = [...inst.phases]; newP[pIdx].steps[sIdx].notes = e.target.value; updateInst({ phases: newP }); }} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="Hingga slightly golden..." /></td>
                                                           <td className="py-1 text-center">
                                                             <button onClick={() => {
                                                               const newP = [...inst.phases]; newP[pIdx].steps.splice(sIdx, 1); updateInst({ phases: newP }); handleSaveRecipe(recipe.id, { ...recipe, instructions: { ...inst, phases: newP } });
-                                                            }} className="text-slate-500 hover:text-red-400 p-1"><i className="fas fa-times"></i></button>
+                                                            }} className="text-slate-400 hover:text-rose-500 p-1 transition-colors"><i className="fas fa-times"></i></button>
                                                           </td>
                                                         </tr>
                                                       ))}
@@ -2034,7 +2227,7 @@
                                                   newP[pIdx].steps.push({ process: '', temp: '', time: '', notes: '' });
                                                   updateInst({ phases: newP });
                                                   handleSaveRecipe(recipe.id, { ...recipe, instructions: { ...inst, phases: newP } });
-                                                }} className="mt-2 text-[10px] text-emerald-400 hover:text-emerald-300 font-bold bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-1 rounded transition-colors"><i className="fas fa-plus mr-1"></i> Tambah Baris Proses</button>
+                                                }} className="mt-2 text-[10px] text-emerald-600 hover:text-emerald-700 font-bold bg-emerald-100 hover:bg-emerald-200 px-2 py-1 rounded transition-colors"><i className="fas fa-plus mr-1"></i> Tambah Baris Proses</button>
                                               </div>
                                             ))}
                                           </div>
@@ -2043,23 +2236,22 @@
                                             const newP = [...(inst.phases || []), { phase: `STEP ${(inst.phases || []).length + 1}`, steps: [{ process: '', temp: '', time: '', notes: '' }] }];
                                             updateInst({ phases: newP });
                                             handleSaveRecipe(recipe.id, { ...recipe, instructions: { ...inst, phases: newP } });
-                                          }} className="w-full border-2 border-dashed border-slate-600 text-slate-400 hover:text-white hover:border-slate-500 hover:bg-slate-800 p-2.5 rounded-lg text-xs font-bold transition-all">
+                                          }} className="w-full border-2 border-dashed border-emerald-300 text-emerald-600 hover:text-emerald-700 hover:border-emerald-400 hover:bg-emerald-50 p-2.5 rounded-lg text-xs font-bold transition-all bg-white">
                                             <i className="fas fa-plus-circle mr-1"></i> Tambah Fase Baru
                                           </button>
 
                                           <div>
-                                            <label className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1 mb-1"><i className="fas fa-sticky-note"></i> Chef Note</label>
-                                            <textarea className="w-full bg-slate-800 border border-slate-600 rounded-lg p-2.5 text-sm text-white min-h-[60px] outline-none focus:border-emerald-500" value={inst.chefNote || ''} onChange={e => updateInst({ chefNote: e.target.value })} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="Catatan khusus dari chef... (Cth: Goreng ikan dalam keadaan benar-benar thawing...)"></textarea>
+                                            <label className="text-[10px] text-emerald-700 uppercase font-bold flex items-center gap-1 mb-1"><i className="fas fa-sticky-note"></i> Chef Note</label>
+                                            <textarea className="w-full bg-white border border-slate-200 rounded-lg p-2.5 text-sm text-slate-800 font-medium min-h-[60px] outline-none focus:border-emerald-500 transition-colors" value={inst.chefNote || ''} onChange={e => updateInst({ chefNote: e.target.value })} onBlur={() => handleSaveRecipe(recipe.id)} placeholder="Catatan khusus dari chef... (Cth: Goreng ikan dalam keadaan benar-benar thawing...)"></textarea>
                                           </div>
                                           <button onClick={() => {
-                                            // Switch back to text mode (Optional, maybe not needed, but good for safety)
                                             if (confirm('Ubah kembali ke mode teks biasa? Format tabel akan hilang.')) {
                                               const text = inst.phases?.map(p => p.phase + ':\n' + p.steps?.map(s => `- ${s.process} (${s.time})`).join('\n')).join('\n\n');
                                               const newRecipes = recipes.map(r => r.id === recipe.id ? { ...r, instructions: text } : r);
                                               setRecipes(newRecipes);
                                               handleSaveRecipe(recipe.id, { ...recipe, instructions: text });
                                             }
-                                          }} className="text-[10px] text-slate-500 hover:text-slate-300 underline mt-2 block text-center w-full">Kembali ke Format Teks Biasa</button>
+                                          }} className="text-[10px] text-slate-500 hover:text-slate-700 underline mt-2 block text-center w-full transition-colors">Kembali ke Format Teks Biasa</button>
                                         </div>
                                       );
                                     })()}
@@ -2215,18 +2407,34 @@
             {/* TAB 5: KATALOG & PENCARIAN */}
             {activeTab === 'katalog' && (
               <div className="space-y-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                  <div className="relative">
+                <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row gap-4">
+                  <div className="relative flex-1">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                       <i className="fas fa-search text-slate-400"></i>
                     </div>
                     <input
                       type="text"
-                      className="w-full pl-11 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 font-medium text-lg transition-colors"
-                      placeholder="Cari nama menu..."
+                      className="w-full pl-11 pr-4 py-4 bg-stone-50 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 font-medium text-lg text-slate-800 placeholder-slate-400 transition-colors"
+                      placeholder="Cari menu untuk dimasukkan ke penjualan..."
                       value={searchKatalog}
                       onChange={(e) => setSearchKatalog(e.target.value)}
                     />
+                  </div>
+                  <div className="relative w-full sm:w-64 shrink-0">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <i className="fas fa-tags text-slate-400"></i>
+                    </div>
+                    <select
+                      className="w-full pl-11 pr-4 py-4 bg-stone-50 border-2 border-slate-100 rounded-xl outline-none focus:border-emerald-500 font-medium text-lg text-slate-800 transition-colors appearance-none"
+                      value={filterKatalogCategory}
+                      onChange={(e) => setFilterKatalogCategory(e.target.value)}
+                    >
+                      <option value="">Semua Kategori</option>
+                      {Array.from(new Set(recipes.map(r => r.menuCategory).filter(Boolean))).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    <i className="fas fa-chevron-down absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
                   </div>
                 </div>
 
@@ -2238,7 +2446,7 @@
                     <i className="fas fa-store"></i> Menu Jual: {recipes.filter(r => r.recipeType !== 'sub').length}
                   </span>
                   <span className="bg-white border border-amber-200 text-amber-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
-                    <i className="fas fa-box-open"></i> Setengah Jadi: {recipes.filter(r => r.recipeType === 'sub').length}
+                    <i className="fas fa-box-open"></i> Bahan 1/2 Jadi: {recipes.filter(r => r.recipeType === 'sub').length}
                   </span>
                   <span className="bg-white border border-sky-200 text-sky-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
                     <i className="fas fa-check-circle"></i> Aktif: {recipes.filter(r => r.isActive !== false).length}
@@ -2249,7 +2457,7 @@
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                  {recipes.filter(r => r.recipeType !== 'sub' && r.menuName.toLowerCase().includes(searchKatalog.toLowerCase())).map(recipe => {
+                  {recipes.filter(r => r.recipeType !== 'sub' && r.menuName.toLowerCase().includes(searchKatalog.toLowerCase()) && (!filterKatalogCategory || r.menuCategory === filterKatalogCategory)).map(recipe => {
                     const hppBahan = calculateRecipeHPP(recipe.id);
                     const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
 
@@ -2287,7 +2495,7 @@
                     );
                   })}
                 </div>
-                {recipes.filter(r => r.recipeType !== 'sub' && r.menuName.toLowerCase().includes(searchKatalog.toLowerCase())).length === 0 && (
+                {recipes.filter(r => r.recipeType !== 'sub' && r.menuName.toLowerCase().includes(searchKatalog.toLowerCase()) && (!filterKatalogCategory || r.menuCategory === filterKatalogCategory)).length === 0 && (
                   <div className="text-center p-12 bg-white rounded-2xl border border-slate-200 border-dashed">
                     <i className="fas fa-search text-4xl text-slate-300 mb-3 block"></i>
                     <p className="text-slate-500 font-medium">Menu tidak ditemukan.</p>
