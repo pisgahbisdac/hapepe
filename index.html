@@ -462,12 +462,18 @@
         if (visited.has(recipeId)) return 0; // Mencegah infinite loop
         visited.add(recipeId);
 
-        const searchStr = String(recipeId || '').toLowerCase();
-        const recipe = recipes.find(r =>
-          String(r.id) === String(recipeId) ||
-          `[resep] ${String(r.menuName || '').toLowerCase()}` === searchStr ||
-          String(r.menuName || '').toLowerCase() === searchStr
-        );
+        let recipe = null;
+        if (editingRecipeData && String(editingRecipeData.id) === String(recipeId)) {
+          recipe = editingRecipeData;
+        } else {
+          const searchStr = String(recipeId || '').toLowerCase();
+          recipe = recipes.find(r =>
+            String(r.id) === String(recipeId) ||
+            `[resep] ${String(r.menuName || '').toLowerCase()}` === searchStr ||
+            String(r.menuName || '').toLowerCase() === searchStr
+          );
+        }
+        
         if (!recipe) return 0;
 
         return (recipe.ingredients || []).reduce((total, ing) => {
@@ -1097,77 +1103,112 @@
         reader.onload = function (event) {
           const img = new Image();
           img.onload = function () {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
+            try {
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d');
 
-            let quality = 0.8;
-            let scale = 1.0;
-            const maxDimension = 600;
-            if (img.width > maxDimension || img.height > maxDimension) {
-              if (img.width > img.height) {
-                scale = maxDimension / img.width;
-              } else {
-                scale = maxDimension / img.height;
-              }
-            }
-
-            let currentWidth = img.width * scale;
-            let currentHeight = img.height * scale;
-            let base64String = "";
-            let isSafe = false;
-
-            // Google Sheets cell limit is 50,000. We target < 49,000 for safety.
-            const MAX_CHARS = 49000;
-
-            for (let attempt = 0; attempt < 10; attempt++) {
-              canvas.width = currentWidth;
-              canvas.height = currentHeight;
-
-              ctx.fillStyle = "white"; // Fallback for transparent PNGs
-              ctx.fillRect(0, 0, canvas.width, canvas.height);
-              ctx.drawImage(img, 0, 0, currentWidth, currentHeight);
-
-              base64String = canvas.toDataURL('image/jpeg', quality);
-
-              if (base64String.length <= MAX_CHARS) {
-                isSafe = true;
-                break;
+              let quality = 0.8;
+              let scale = 1.0;
+              const maxDimension = 600;
+              if (img.width > maxDimension || img.height > maxDimension) {
+                if (img.width > img.height) {
+                  scale = maxDimension / img.width;
+                } else {
+                  scale = maxDimension / img.height;
+                }
               }
 
-              quality -= 0.1;
-              if (quality < 0.3) quality = 0.3;
-              currentWidth *= 0.8;
-              currentHeight *= 0.8;
-            }
+              let currentWidth = img.width * scale;
+              let currentHeight = img.height * scale;
+              let base64String = "";
+              let isSafe = false;
 
-            if (!isSafe) {
-              canvas.width = 100;
-              canvas.height = 100;
-              ctx.drawImage(img, 0, 0, 100, 100);
-              base64String = canvas.toDataURL('image/jpeg', 0.5);
-            }
+              // Google Sheets cell limit is 50,000. We target < 49,000 for safety.
+              const MAX_CHARS = 49000;
 
-            callback(base64String);
+              for (let attempt = 0; attempt < 10; attempt++) {
+                canvas.width = currentWidth;
+                canvas.height = currentHeight;
+
+                ctx.fillStyle = "white"; // Fallback for transparent PNGs
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, 0, 0, currentWidth, currentHeight);
+
+                base64String = canvas.toDataURL('image/jpeg', quality);
+
+                if (base64String.length <= MAX_CHARS) {
+                  isSafe = true;
+                  break;
+                }
+
+                quality -= 0.1;
+                if (quality < 0.3) quality = 0.3;
+                currentWidth *= 0.8;
+                currentHeight *= 0.8;
+              }
+
+              if (!isSafe) {
+                canvas.width = 100;
+                canvas.height = 100;
+                ctx.drawImage(img, 0, 0, 100, 100);
+                base64String = canvas.toDataURL('image/jpeg', 0.5);
+              }
+
+              callback(base64String);
+            } catch (err) {
+              console.error("Image compression error:", err);
+              callback(null);
+            }
           };
+          img.onerror = function() {
+             console.error("Invalid image file");
+             callback(null);
+          }
           img.src = event.target.result;
         };
+        reader.onerror = function() {
+           console.error("FileReader error");
+           callback(null);
+        }
         reader.readAsDataURL(file);
       };
 
       const handleImageUpload = (recipeId, e) => {
         const file = e.target.files[0];
+        const inputElement = e.target; // Simpan referensi ke input
         if (!file) return;
+        
+        // Cek ukuran file > 10MB
+        if (file.size > 10 * 1024 * 1024) {
+           alert("File terlalu besar! Maksimal ukuran gambar adalah 10 MB.");
+           inputElement.value = ''; // Reset input
+           return;
+        }
 
         setIsUploadingImage(true);
         compressImageToBase64(file, (compressedBase64) => {
+          if (!compressedBase64) {
+             alert("Gagal mengunggah gambar. Pastikan format file didukung (JPG/PNG).");
+             setIsUploadingImage(false);
+             inputElement.value = ''; // Reset input
+             return;
+          }
           const recipe = recipes.find(r => r.id === recipeId);
           if (recipe) {
             const updatedRecipe = { ...recipe, imageUrl: compressedBase64 };
             handleSaveRecipe(recipeId, updatedRecipe);
+            
+            // Perbarui state form edit agar gambar langsung muncul tanpa harus keluar modal
+            if (editingRecipeData && editingRecipeData.id === recipeId) {
+              setEditingRecipeData(updatedRecipe);
+            }
           }
           setIsUploadingImage(false);
+          inputElement.value = ''; // Reset input agar gambar yang sama bisa diunggah lagi
         });
       };
+
+
 
       // --- RECIPES ---
       const handleAddMenu = (e) => {
@@ -2348,7 +2389,12 @@
 
                                       {/* Tombol hapus gambar */}
                                       <button
-                                        onClick={() => handleSaveRecipe(recipe.id, { ...recipe, imageUrl: '' })}
+                                        onClick={() => {
+                                          handleSaveRecipe(recipe.id, { ...recipe, imageUrl: '' });
+                                          if (editingRecipeData && editingRecipeData.id === recipe.id) {
+                                            setEditingRecipeData({ ...editingRecipeData, imageUrl: '' });
+                                          }
+                                        }}
                                         className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md print-hide"
                                         title="Hapus Gambar"
                                       >
