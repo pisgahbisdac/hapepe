@@ -1194,7 +1194,10 @@
              if (input) input.value = ''; // Reset input
              return;
           }
-          const recipe = recipes.find(r => r.id === recipeId);
+          const recipe = (editingRecipeData && editingRecipeData.id === recipeId) 
+            ? editingRecipeData 
+            : recipes.find(r => r.id === recipeId);
+            
           if (recipe) {
             const updatedRecipe = { ...recipe, imageUrl: compressedBase64 };
             handleSaveRecipe(recipeId, updatedRecipe);
