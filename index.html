@@ -265,6 +265,7 @@
       const [customConversions, setCustomConversions] = useState([]);
       const [butcherItems, setButcherItems] = useState([]);
 
+      const [stockWarning, setStockWarning] = useState(null);
       const [showConversionModal, setShowConversionModal] = useState(false);
       const [editingConversionItem, setEditingConversionItem] = useState(null);
       const [newConversion, setNewConversion] = useState({ packUnit: 'Botol', baseQty: '' });
@@ -286,6 +287,7 @@
       const [selectedKatalogMenu, setSelectedKatalogMenu] = useState(null);
       const [isUploadingImage, setIsUploadingImage] = useState(false);
       const [inventorySearch, setInventorySearch] = useState('');
+      const [laporanPemakaianDate, setLaporanPemakaianDate] = useState(() => new Date().toISOString().split('T')[0]);
       const [selectedPriceDetailItem, setSelectedPriceDetailItem] = useState(null);
       const [selectedInventoryHistory, setSelectedInventoryHistory] = useState(null);
 
@@ -712,7 +714,7 @@
           const name = String(adj.itemName || '').toLowerCase();
           const qtyAdj = Number(adj.quantity) || 0;
           const item = ensureItem(name, adj.itemName);
-          const historyEntry = { date: adj.date, type: 'Buang / Penyesuaian', qty: qtyAdj, details: adj.note || '-' };
+          const historyEntry = { date: adj.date, type: 'Buang / Penyesuaian', qty: qtyAdj, details: adj.reason || adj.note || '-' };
 
           if (bucket === 'awal') {
             item.stokAwal -= qtyAdj;
@@ -893,6 +895,76 @@
       // ==========================================
       // EXPORT HANDLERS
       // ==========================================
+      const handleExportLaporanPemakaian = () => {
+        const getNormalizedDate = (dateStr) => {
+          if (!dateStr) return '';
+          if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return dateStr.substring(0, 10);
+          const parts = dateStr.split('/');
+          if (parts.length === 3) {
+            if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+          }
+          return formatDateLocal(dateStr);
+        };
+        const dailySales = sales.filter(s => getNormalizedDate(String(s.date)) === laporanPemakaianDate);
+        
+        const usageMap = new Map();
+        dailySales.forEach(sale => {
+          const recipe = recipes.find(r => 
+            String(r.id) === String(sale.recipeId) || 
+            String(r.menuName).toLowerCase() === String(sale.recipeId).toLowerCase() ||
+            String(r.menuName).toLowerCase() === String(sale.menuName).toLowerCase()
+          );
+          if (recipe) {
+            const recipeYield = recipe.yieldQty || 1;
+            const multiplier = sale.quantitySold / recipeYield;
+            const reqMap = getFlatRequiredIngredients(recipe.id, multiplier);
+            
+            for (let [ingName, reqQty] of reqMap.entries()) {
+              if (!usageMap.has(ingName)) {
+                const invItem = inventoryData.find(item => String(item.name).toLowerCase() === ingName);
+                const unit = invItem ? invItem.unit : (uniqueItems.find(u => u.name.toLowerCase() === ingName)?.unit || '-');
+                const price = invItem ? (Number(invItem.price) || 0) : 0;
+                usageMap.set(ingName, {
+                  itemName: invItem ? invItem.name : ingName,
+                  unit: unit,
+                  price: price,
+                  totalQty: 0,
+                  totalCost: 0,
+                  details: []
+                });
+              }
+              const itemData = usageMap.get(ingName);
+              itemData.totalQty += reqQty;
+              itemData.totalCost += (reqQty * itemData.price);
+              itemData.details.push(`${recipe.menuName} (${sale.quantitySold} porsi: ${formatNum(Number(reqQty.toFixed(2)))} ${itemData.unit})`);
+            }
+          }
+        });
+        
+        const usageList = Array.from(usageMap.values()).sort((a,b) => b.totalQty - a.totalQty);
+        
+        const headers = ['Tanggal', 'Nama Bahan', 'Total Terpakai', 'Satuan', 'Total Biaya (Rp)', 'Rincian Menu'];
+        const rows = usageList.map(item => [
+          laporanPemakaianDate,
+          `"${item.itemName}"`,
+          Number(item.totalQty.toFixed(2)),
+          item.unit,
+          Math.round(item.totalCost),
+          `"${item.details.join(', ')}"`
+        ]);
+        
+        let csvContent = headers.join(',') + '\n' + rows.map(r => r.join(',')).join('\n');
+        const grandTotal = usageList.reduce((sum, item) => sum + item.totalCost, 0);
+        csvContent += `\n,,,"TOTAL BIAYA:",${Math.round(grandTotal)},\n`;
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.setAttribute('href', url);
+        a.setAttribute('download', `Laporan_Pemakaian_${laporanPemakaianDate}.csv`);
+        a.click();
+      };
+
       const handleExportExcel = () => {
         const headers = ['Nama Bahan', 'Satuan Dasar', 'Harga Rata-rata', 'Stok Awal', 'Masuk (Beli)', 'Keluar (Resep)', 'Keluar (Buang)', 'Stok Akhir', 'Konversi', 'Nilai Inventaris'];
         const rows = inventoryData.map(item => {
@@ -1042,6 +1114,142 @@
           }
           setSalesSimulation(newSimulasi);
           e.target.value = ''; // reset file input
+        };
+        reader.readAsText(file);
+      };
+
+      const handleExportSalesExcel = () => {
+        const headers = ['Tanggal', 'Nama Menu Terjual', 'Jumlah Terjual (Porsi)'];
+        const rows = sales.map(s => {
+          return [
+            `"${s.date}"`,
+            `"${s.menuName.replace(/"/g, '""')}"`,
+            s.quantitySold
+          ];
+        });
+        const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Riwayat_Penjualan.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      const handleImportSalesExcel = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const text = event.target.result;
+          const lines = text.split('\n');
+          const newSales = [];
+          
+          for (let i = 1; i < lines.length; i++) {
+            let line = lines[i].trim();
+            if (!line) continue;
+            
+            const matches = line.match(/(?:"([^"]*(?:""[^"]*)*)"|([^,]+)|(?<=,)(?=,)|(?<=^)(?=,)|(?<=,)(?=$))/g);
+            if (!matches || matches.length < 3) continue;
+            
+            const parseField = (str) => {
+              if (str === undefined || str === null) return '';
+              return str.replace(/^"|"$/g, '').replace(/""/g, '"').trim();
+            };
+            
+            let date = parseField(matches[0]);
+            let menuName = parseField(matches[1]);
+            let quantitySold = parseFloat(parseField(matches[2])) || 0;
+            
+            if (date && menuName && quantitySold > 0) {
+              const matchedRecipe = recipes.find(r => r.menuName === menuName && r.recipeType !== 'sub');
+              newSales.push({
+                id: Date.now() + Math.floor(Math.random() * 100000) + i,
+                date: date,
+                recipeId: matchedRecipe ? matchedRecipe.id : `UNKNOWN_${menuName}`,
+                menuName: menuName,
+                quantitySold: quantitySold
+              });
+            }
+          }
+          
+          if (newSales.length > 0) {
+            setSales([...sales, ...newSales]);
+            sendApiRequest('importMultipleSales', { sales: newSales });
+          }
+          e.target.value = '';
+        };
+        reader.readAsText(file);
+      };
+
+      const handleExportPurchasesExcel = () => {
+        const headers = ['Tanggal', 'Nama Bahan', 'Kuantitas', 'Satuan', 'Total Bayar'];
+        const rows = purchases.map(p => {
+          return [
+            `"${p.date}"`,
+            `"${p.itemName.replace(/"/g, '""')}"`,
+            p.quantity,
+            `"${p.unit}"`,
+            p.totalPrice
+          ];
+        });
+        const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Riwayat_Pembelian.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      const handleImportPurchasesExcel = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const text = event.target.result;
+          const lines = text.split('\n');
+          const newPurchases = [];
+          
+          for (let i = 1; i < lines.length; i++) {
+            let line = lines[i].trim();
+            if (!line) continue;
+            
+            const matches = line.match(/(?:"([^"]*(?:""[^"]*)*)"|([^,]+)|(?<=,)(?=,)|(?<=^)(?=,)|(?<=,)(?=$))/g);
+            if (!matches || matches.length < 5) continue;
+            
+            const parseField = (str) => {
+              if (str === undefined || str === null) return '';
+              return str.replace(/^"|"$/g, '').replace(/""/g, '"').trim();
+            };
+            
+            let date = parseField(matches[0]);
+            let itemName = parseField(matches[1]);
+            let quantity = parseFloat(parseField(matches[2])) || 0;
+            let unit = parseField(matches[3]);
+            let totalPrice = parseFloat(parseField(matches[4])) || 0;
+            
+            if (date && itemName && quantity > 0) {
+              newPurchases.push({
+                id: Date.now() + Math.floor(Math.random() * 100000) + i,
+                date: date,
+                itemName: itemName,
+                quantity: quantity,
+                unit: unit,
+                totalPrice: totalPrice
+              });
+            }
+          }
+          
+          if (newPurchases.length > 0) {
+            setPurchases([...purchases, ...newPurchases]);
+            sendApiRequest('importMultiplePurchases', { purchases: newPurchases });
+          }
+          e.target.value = '';
         };
         reader.readAsText(file);
       };
@@ -1266,11 +1474,35 @@
         const typedValue = String(newSale.recipeId).toLowerCase();
         const recipe = recipes.find(r => 
           String(r.id) === typedValue || 
-          String(r.menuName).toLowerCase() === typedValue
+          String(r.menuName).toLowerCase() === typedValue ||
+          String(r.menuName).toLowerCase() === String(newSale.menuName || '').toLowerCase()
         );
         
         if (!recipe) {
           alert('Menu tidak ditemukan! Pastikan Anda memilih dari daftar.');
+          return;
+        }
+
+        const recipeYield = recipe.yieldQty || 1;
+        const multiplier = parsedQty / recipeYield;
+        const requiredIngredients = getFlatRequiredIngredients(recipe.id, multiplier);
+        
+        let insufficientItems = [];
+        for (let [ingName, reqQty] of requiredIngredients.entries()) {
+          const invItem = inventoryData.find(item => String(item.name).toLowerCase() === ingName);
+          const stock = invItem ? invItem.stokAkhir : 0;
+          if (stock < reqQty) {
+            const unit = invItem ? invItem.unit : (uniqueItems.find(u => u.name.toLowerCase() === ingName)?.unit || '-');
+            insufficientItems.push({
+              name: ingName,
+              required: `${formatNum(reqQty)} ${unit}`,
+              stock: `${formatNum(stock)} ${unit}`
+            });
+          }
+        }
+        
+        if (insufficientItems.length > 0) {
+          setStockWarning({ recipeName: recipe.menuName, parsedQty, insufficientItems });
           return;
         }
 
@@ -2092,7 +2324,7 @@
                 <div className="lg:col-span-3 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col h-[calc(100vh-250px)] min-h-[600px]">
                   <div className="flex flex-col md:flex-row justify-between md:items-center mb-4 border-b pb-4 gap-4 shrink-0">
                     <h2 className="text-lg font-bold">Riwayat Belanja</h2>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap md:flex-nowrap justify-end">
                       <div className="relative">
                         <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
                         <input
@@ -2109,6 +2341,13 @@
                         value={filterBulan}
                         onChange={e => setFilterBulan(e.target.value)}
                       />
+                      <button onClick={handleExportPurchasesExcel} className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 px-3 py-2 rounded-lg transition-colors font-bold text-sm flex items-center gap-2">
+                        <i className="fas fa-download"></i> Ekspor CSV
+                      </button>
+                      <label className="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3 py-2 rounded-lg transition-colors font-bold text-sm flex items-center gap-2 cursor-pointer">
+                        <i className="fas fa-upload"></i> Impor CSV
+                        <input type="file" accept=".csv" className="hidden" onChange={handleImportPurchasesExcel} />
+                      </label>
                     </div>
                   </div>
 
@@ -3626,8 +3865,19 @@
                   {/* Form Penjualan */}
                   {(userRole === 'admin' || userPermissions.includes('inv_sales')) && (
                   <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                    <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2 text-emerald-700">
-                      <i className="fas fa-cash-register"></i> Input Penjualan (Stock Out)
+                    <h2 className="text-lg font-bold mb-4 border-b pb-2 flex flex-col sm:flex-row justify-between items-start sm:items-center text-emerald-700 gap-2">
+                      <div className="flex items-center gap-2">
+                        <i className="fas fa-cash-register"></i> Input Penjualan
+                      </div>
+                      <div className="flex gap-2">
+                         <button onClick={handleExportSalesExcel} className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs flex items-center gap-2">
+                          <i className="fas fa-download"></i> Ekspor CSV
+                         </button>
+                         <label className="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs flex items-center gap-2 cursor-pointer">
+                          <i className="fas fa-upload"></i> Impor CSV
+                          <input type="file" accept=".csv" className="hidden" onChange={handleImportSalesExcel} />
+                         </label>
+                      </div>
                     </h2>
                     <form onSubmit={handleAddSale} className="space-y-4">
                       <div><label className="text-sm font-semibold">Tanggal Penjualan</label><input type="date" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none" value={newSale.date} onChange={e => setNewSale({ ...newSale, date: e.target.value })} required /></div>
@@ -3677,6 +3927,222 @@
                   </div>
                   )}
                 </div>
+
+                {/* Laporan Pemakaian Bahan (Daily Usage Report) */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b pb-4 gap-4">
+                      <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <i className="fas fa-utensils text-rose-500"></i> Laporan Pemakaian Bahan
+                      </h2>
+                      <div className="flex gap-2 w-full sm:w-auto">
+                        <button onClick={handleExportLaporanPemakaian} className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 px-3 py-2 rounded-lg transition-colors font-bold text-xs flex items-center gap-2 flex-1 sm:flex-none justify-center">
+                          <i className="fas fa-download"></i> Ekspor CSV
+                        </button>
+                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg flex-1 sm:flex-none">
+                          <label className="text-sm font-semibold text-slate-600 hidden sm:block">Tanggal:</label>
+                          <input type="date" className="bg-transparent outline-none text-sm font-bold text-slate-800 w-full" value={laporanPemakaianDate} onChange={e => setLaporanPemakaianDate(e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {(() => {
+                      const getNormalizedDate = (dateStr) => {
+                        if (!dateStr) return '';
+                        if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return dateStr.substring(0, 10);
+                        const parts = dateStr.split('/');
+                        if (parts.length === 3) {
+                          if (parts[2].length === 4) return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                        }
+                        return formatDateLocal(dateStr);
+                      };
+                      const dailySales = sales.filter(s => getNormalizedDate(String(s.date)) === laporanPemakaianDate);
+                      if (dailySales.length === 0) {
+                        return (
+                          <div className="p-8 text-center text-slate-400 border rounded-xl bg-slate-50 mt-4">
+                            <i className="fas fa-receipt text-3xl mb-3 block opacity-50"></i>
+                            Belum ada penjualan tercatat di tanggal ini.
+                          </div>
+                        );
+                      }
+                      
+                      const usageMap = new Map();
+                      let totalRevenue = 0;
+                      let totalHppForSales = 0;
+                      const menuSummaryMap = new Map();
+
+                      dailySales.forEach(sale => {
+                        const recipe = recipes.find(r => 
+                          String(r.id) === String(sale.recipeId) || 
+                          String(r.menuName).toLowerCase() === String(sale.recipeId).toLowerCase() ||
+                          String(r.menuName).toLowerCase() === String(sale.menuName).toLowerCase()
+                        );
+                        if (recipe) {
+                          // Calculate single yield HPP
+                          const recipeYield = recipe.yieldQty || 1;
+                          const singleReqMap = getFlatRequiredIngredients(recipe.id, 1);
+                          let hpp1Yield = 0;
+                          for (let [ingName, reqQty] of singleReqMap.entries()) {
+                            const invItem = inventoryData.find(item => String(item.name).toLowerCase() === ingName);
+                            const price = invItem ? (Number(invItem.price) || 0) : 0;
+                            hpp1Yield += (reqQty * price);
+                          }
+                          const hppPerPorsi = hpp1Yield / recipeYield;
+                          const hargaJualIdealPerPorsi = hppPerPorsi / (1 - ((recipe.targetMarginPercent || 0) / 100));
+                          
+                          const hppTotalSale = hppPerPorsi * sale.quantitySold;
+                          const revenueTotalSale = hargaJualIdealPerPorsi * sale.quantitySold;
+                          
+                          totalHppForSales += hppTotalSale;
+                          totalRevenue += revenueTotalSale;
+
+                          if (!menuSummaryMap.has(recipe.menuName)) {
+                            menuSummaryMap.set(recipe.menuName, {
+                              menuName: recipe.menuName,
+                              qty: 0,
+                              revenue: 0
+                            });
+                          }
+                          const sumMenu = menuSummaryMap.get(recipe.menuName);
+                          sumMenu.qty += sale.quantitySold;
+                          sumMenu.revenue += revenueTotalSale;
+
+                          // Process ingredients usage
+                          const multiplier = sale.quantitySold / recipeYield;
+                          const reqMap = getFlatRequiredIngredients(recipe.id, multiplier);
+                          
+                          for (let [ingName, reqQty] of reqMap.entries()) {
+                            if (!usageMap.has(ingName)) {
+                              const invItem = inventoryData.find(item => String(item.name).toLowerCase() === ingName);
+                              const unit = invItem ? invItem.unit : (uniqueItems.find(u => u.name.toLowerCase() === ingName)?.unit || '-');
+                              const price = invItem ? (Number(invItem.price) || 0) : 0;
+                              usageMap.set(ingName, {
+                                itemName: invItem ? invItem.name : ingName, 
+                                unit: unit,
+                                price: price,
+                                totalQty: 0,
+                                totalCost: 0,
+                                details: []
+                              });
+                            }
+                            const itemData = usageMap.get(ingName);
+                            itemData.totalQty += reqQty;
+                            itemData.totalCost += (reqQty * itemData.price);
+                            itemData.details.push({
+                              menuName: recipe.menuName,
+                              soldQty: sale.quantitySold,
+                              usageQty: reqQty
+                            });
+                          }
+                        }
+                      });
+                      
+                      const usageList = Array.from(usageMap.values()).sort((a,b) => b.totalQty - a.totalQty);
+                      const menuSummaryList = Array.from(menuSummaryMap.values()).sort((a,b) => b.qty - a.qty);
+                      const grandMargin = totalRevenue - totalHppForSales;
+                      const grandMarginPercent = totalRevenue > 0 ? (grandMargin / totalRevenue) * 100 : 0;
+                      
+                      return (
+                        <div className="space-y-6">
+                          {/* Ringkasan Penjualan Card */}
+                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
+                            <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
+                              <i className="fas fa-chart-pie text-emerald-500"></i> Ringkasan Penjualan ({laporanPemakaianDate})
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                              <div className="bg-white p-4 rounded-lg border border-slate-100 shadow-sm">
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">Total Pendapatan</p>
+                                <p className="text-xl font-black text-slate-800 mt-1">Rp {formatNum(Math.round(totalRevenue))}</p>
+                              </div>
+                              <div className="bg-white p-4 rounded-lg border border-slate-100 shadow-sm">
+                                <p className="text-xs font-bold text-rose-500 uppercase tracking-wide">Total Modal HPP</p>
+                                <p className="text-xl font-black text-rose-600 mt-1">Rp {formatNum(Math.round(totalHppForSales))}</p>
+                              </div>
+                              <div className="bg-white p-4 rounded-lg border border-slate-100 shadow-sm">
+                                <p className="text-xs font-bold text-emerald-500 uppercase tracking-wide">Keuntungan Kotor</p>
+                                <p className="text-xl font-black text-emerald-600 mt-1">Rp {formatNum(Math.round(grandMargin))}</p>
+                              </div>
+                              <div className="bg-white p-4 rounded-lg border border-slate-100 shadow-sm">
+                                <p className="text-xs font-bold text-sky-500 uppercase tracking-wide">Margin Aktual</p>
+                                <p className="text-xl font-black text-sky-600 mt-1">{formatNum(Number(grandMarginPercent.toFixed(2)))}%</p>
+                              </div>
+                            </div>
+                            
+                            {/* Porsi Terjual per Menu */}
+                            <div className="bg-white rounded-lg border border-slate-100 shadow-sm overflow-hidden">
+                              <div className="bg-slate-100/50 px-4 py-2 border-b border-slate-100 text-xs font-bold text-slate-600 uppercase">
+                                Rincian Porsi Terjual per Menu
+                              </div>
+                              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                {menuSummaryList.map((m, idx) => (
+                                  <div key={idx} className="flex justify-between items-center bg-slate-50 p-2 rounded border border-slate-100">
+                                    <div className="flex flex-col">
+                                      <span className="font-bold text-slate-700 text-sm">{m.menuName}</span>
+                                      <span className="text-xs font-medium text-emerald-600">Rp {formatNum(Math.round(m.revenue))}</span>
+                                    </div>
+                                    <span className="bg-white border border-slate-200 px-2 py-1 rounded text-xs font-black text-slate-600">
+                                      {m.qty} <span className="font-normal text-slate-400">Porsi</span>
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                            <table className="w-full text-sm text-left">
+                              <thead className="bg-slate-100 text-slate-600">
+                                <tr>
+                                  <th className="p-3 font-bold">Nama Bahan Terpakai</th>
+                                  <th className="p-3 text-right font-bold">Total Terpakai</th>
+                                  <th className="p-3 text-right font-bold">Total Biaya HPP</th>
+                                  <th className="p-3 font-bold">Distribusi Penggunaan Menu</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 bg-white">
+                                {usageList.length === 0 ? (
+                                  <tr>
+                                    <td colSpan="4" className="p-8 text-center text-slate-400">
+                                      <i className="fas fa-exclamation-circle text-3xl mb-3 block opacity-50"></i>
+                                      Ada {dailySales.length} porsi terjual, tetapi tidak ada bahan baku yang terkait dengan menu tersebut (mungkin resep belum diisi).
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  <>
+                                    {usageList.map((item, idx) => (
+                                      <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                        <td className="p-3 font-semibold text-slate-700">{item.itemName}</td>
+                                        <td className="p-3 text-right text-rose-600 font-bold whitespace-nowrap">
+                                          {formatNum(Number(item.totalQty.toFixed(2)))} <span className="text-xs font-normal text-rose-400 uppercase">{item.unit}</span>
+                                        </td>
+                                        <td className="p-3 text-right text-slate-700 font-bold whitespace-nowrap">
+                                          {formatNum(Math.round(item.totalCost))}
+                                        </td>
+                                        <td className="p-3">
+                                          <div className="flex flex-col gap-1">
+                                            {item.details.map((det, i) => (
+                                              <div key={i} className="flex justify-between items-center bg-slate-50 border border-slate-100 px-2 py-1 rounded text-xs">
+                                                <span className="text-slate-600">{det.menuName} <span className="text-slate-400">({det.soldQty} porsi)</span></span>
+                                                <span className="text-slate-500 font-medium">{formatNum(Number(det.usageQty.toFixed(2)))}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                    <tr className="bg-slate-100/50 border-t-2 border-slate-200">
+                                      <td colSpan="2" className="p-4 text-right font-bold text-slate-600 uppercase text-xs tracking-wider">Total Keseluruhan Biaya HPP:</td>
+                                      <td className="p-4 text-right font-black text-rose-600 text-base border-x border-slate-200 bg-white">Rp {formatNum(Math.round(usageList.reduce((s, i) => s + i.totalCost, 0)))}</td>
+                                      <td className="p-4"></td>
+                                    </tr>
+                                  </>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
 
                 {/* Tabel Dashboard Stok */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 print-area">
@@ -4002,6 +4468,47 @@
               </div>
             </div>
           )}
+          {/* Modal Peringatan Stok */}
+          {stockWarning && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4 z-50 print-hide animate-fade-in">
+              <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-slide-up">
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-rose-50">
+                  <div>
+                    <h3 className="text-xl font-bold text-rose-800 flex items-center gap-2">
+                      <i className="fas fa-exclamation-triangle text-rose-600"></i> Penjualan Ditolak
+                    </h3>
+                  </div>
+                  <button onClick={() => setStockWarning(null)} className="text-rose-400 hover:text-rose-600 transition-colors w-8 h-8 flex justify-center items-center rounded-full hover:bg-rose-100">
+                    <i className="fas fa-times"></i>
+                  </button>
+                </div>
+                <div className="p-6">
+                  <p className="text-slate-600 mb-4 leading-relaxed">
+                    Stok bahan baku berikut tidak mencukupi untuk membuat <span className="font-bold text-slate-800">{stockWarning.parsedQty} porsi {stockWarning.recipeName}</span>:
+                  </p>
+                  <div className="bg-rose-50 border border-rose-100 rounded-xl p-4 max-h-60 overflow-y-auto custom-scrollbar">
+                    <ul className="space-y-3">
+                      {stockWarning.insufficientItems.map((item, idx) => (
+                        <li key={idx} className="flex flex-col text-sm bg-white p-3 rounded-lg border border-rose-100 shadow-sm">
+                          <span className="font-bold text-rose-700 capitalize mb-1">{item.name}</span>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-500">Kebutuhan: <span className="font-bold text-slate-700">{item.required}</span></span>
+                            <span className="text-rose-500">Sisa Stok: <span className="font-bold">{item.stock}</span></span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
+                  <button onClick={() => setStockWarning(null)} className="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-xl font-bold transition-all shadow-sm">
+                    Mengerti & Tutup
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Modal Konversi Kemasan */}
           {showConversionModal && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4 z-50 print-hide animate-fade-in">

@@ -545,6 +545,10 @@ function doPost(e) {
         result = addRowToSheet(SHEET_PURCHASES, [data.id, data.date, data.itemName, data.unit, data.quantity, data.totalPrice]);
         logAudit(ss, username, 'Tambah Pembelian', `Menambahkan pembelian bahan: ${data.itemName} (${data.quantity} ${data.unit})`);
         break;
+      case 'importMultiplePurchases':
+        result = importMultipleRows(SHEET_PURCHASES, data.purchases.map(p => [p.id, p.date, p.itemName, p.unit, p.quantity, p.totalPrice]));
+        logAudit(ss, username, 'Impor Massal Pembelian', `Mengimpor ${data.purchases.length} riwayat pembelian.`);
+        break;
       case 'editPurchase':
         result = editRowById(SHEET_PURCHASES, data.id, [data.id, data.date, data.itemName, data.unit, data.quantity, data.totalPrice]);
         logAudit(ss, username, 'Edit Pembelian', `Mengubah pembelian bahan: ${data.itemName} (${data.quantity} ${data.unit})`);
@@ -588,6 +592,10 @@ function doPost(e) {
       case 'addSale':
         result = addRowToSheet(SHEET_SALES, [data.id, data.date, data.recipeId, data.quantitySold, data.menuName]);
         logAudit(ss, username, 'Input Penjualan', `Mencatat penjualan: ${data.menuName} (${data.quantitySold} porsi)`);
+        break;
+      case 'importMultipleSales':
+        result = importMultipleRows(SHEET_SALES, data.sales.map(s => [s.id, s.date, s.recipeId, s.quantitySold, s.menuName]));
+        logAudit(ss, username, 'Impor Massal Penjualan', `Mengimpor ${data.sales.length} riwayat penjualan.`);
         break;
       case 'deleteSale':
         result = deleteRowById(SHEET_SALES, data.id);
@@ -737,7 +745,11 @@ function readSheetData(sheet) {
   for (let i = 1; i < data.length; i++) {
     let rowObj = {};
     for (let j = 0; j < headers.length; j++) {
-      rowObj[headers[j]] = data[i][j];
+      let val = data[i][j];
+      if (val instanceof Date) {
+        val = Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy-MM-dd");
+      }
+      rowObj[headers[j]] = val;
     }
     rows.push(rowObj);
   }
@@ -937,4 +949,14 @@ function updateMultipleRecipes(recipesList) {
   
   ensureRecipeHeaders(ss, Math.floor((maxColsNeeded - 7) / 3));
   return { message: "Multiple recipes updated successfully" };
+}
+
+function importMultipleRows(sheetName, rowsData) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet || rowsData.length === 0) return { message: "No data to import" };
+  
+  const startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, 1, rowsData.length, rowsData[0].length).setValues(rowsData);
+  return { message: "Multiple rows imported successfully" };
 }
