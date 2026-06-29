@@ -3903,11 +3903,17 @@
                 <form onSubmit={handleAddButcherItem} className="flex flex-col md:flex-row gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
                   <input type="text" placeholder="Bahan Butcher (contoh: Daging Sapi Slice)" className="flex-1 p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-red-500 font-medium" value={newButcherItem.itemName} onChange={e => setNewButcherItem({ ...newButcherItem, itemName: e.target.value })} required />
                   <input type="text" placeholder="Berat Bersih (contoh: 500g)" className="w-full md:w-1/4 p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-red-500 font-medium" value={newButcherItem.netWeight} onChange={e => setNewButcherItem({ ...newButcherItem, netWeight: e.target.value })} required />
-                  <input type="text" placeholder="Kategori/Subteks" className="w-full md:w-1/4 p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-red-500 font-medium" value={newButcherItem.category} onChange={e => setNewButcherItem({ ...newButcherItem, category: e.target.value })} required />
+                  <input type="text" placeholder="Kategori/Subteks" className="w-full md:w-1/4 p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-red-500 font-medium" value={newButcherItem.category} onChange={e => setNewButcherItem({ ...newButcherItem, category: e.target.value })} required list="butcher-inventory-list" />
                   <button type="submit" className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md shadow-red-500/20 whitespace-nowrap">
                     <i className="fas fa-plus mr-2"></i> Tambah
                   </button>
                 </form>
+
+                <datalist id="butcher-inventory-list">
+                  {uniqueItems.map((u, idx) => (
+                    <option key={idx} value={u.name} />
+                  ))}
+                </datalist>
 
                 <div className="overflow-x-auto custom-scrollbar">
                   <table className="w-full text-left text-sm">
@@ -3951,7 +3957,7 @@
                             </td>
                             <td className="p-3">
                               {isEditing ? (
-                                <input type="text" className="w-full p-2 border border-slate-200 rounded-lg font-medium" value={editingButcherItem.category} onChange={e => setEditingButcherItem({ ...editingButcherItem, category: e.target.value })} />
+                                <input type="text" className="w-full p-2 border border-slate-200 rounded-lg font-medium" value={editingButcherItem.category} onChange={e => setEditingButcherItem({ ...editingButcherItem, category: e.target.value })} list="butcher-inventory-list" />
                               ) : (
                                 <span className="text-slate-600 text-sm">{item.category || 'Bahan Baku & Potongan'}</span>
                               )}
