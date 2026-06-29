@@ -68,8 +68,8 @@ function setup() {
   let butcherSheet = ss.getSheetByName(SHEET_BUTCHER);
   if (!butcherSheet) {
     butcherSheet = ss.insertSheet(SHEET_BUTCHER);
-    butcherSheet.appendRow(['ID', 'ItemName', 'NetWeight', 'ImageURL']);
-    butcherSheet.getRange("A1:D1").setFontWeight("bold");
+    butcherSheet.appendRow(['ID', 'ItemName', 'NetWeight', 'ImageURL', 'Category']);
+    butcherSheet.getRange("A1:E1").setFontWeight("bold");
   }
 
   // Create Sales sheet
@@ -287,7 +287,8 @@ function doGet(e) {
         id: row.ID,
         itemName: row.ItemName,
         netWeight: row.NetWeight,
-        imageUrl: row.ImageURL || ''
+        imageUrl: row.ImageURL,
+        category: row.Category || 'Bahan Baku & Potongan'
       }));
     }
 
@@ -500,7 +501,8 @@ function doPost(e) {
           id: row.ID,
           itemName: row.ItemName,
           netWeight: row.NetWeight,
-          imageUrl: row.ImageURL || ''
+          imageUrl: row.ImageURL,
+          category: row.Category || 'Bahan Baku & Potongan'
         }));
       }
       return createJsonResponse({ status: 'success', data: butcherItems });
@@ -635,22 +637,29 @@ function doPost(e) {
         break;
         
       case 'addButcherItem':
-        if (authResult.role !== 'admin') throw new Error("Akses ditolak");
+        if (authResult.role !== 'admin' && !(authResult.permissions && authResult.permissions.includes('butcher'))) throw new Error("Akses ditolak");
         const bSheet = ss.getSheetByName(SHEET_BUTCHER);
         if (!bSheet) throw new Error("Sheet Butcher tidak ditemukan");
-        bSheet.appendRow([data.id, data.itemName, data.netWeight, data.imageUrl || '']);
+        
+        // Ensure header exists for Category
+        const headers = bSheet.getRange(1, 1, 1, bSheet.getLastColumn()).getValues()[0];
+        if (headers.indexOf('Category') === -1) {
+          bSheet.getRange(1, headers.length + 1).setValue('Category');
+        }
+        
+        bSheet.appendRow([data.id, data.itemName, data.netWeight, data.imageUrl || '', data.category || 'Bahan Baku & Potongan']);
         result = { message: "Item butcher ditambahkan" };
         logAudit(ss, username, 'Tambah Butcher', `Menambah item butcher: ${data.itemName} (${data.netWeight})`);
         break;
 
       case 'editButcherItem':
-        if (authResult.role !== 'admin') throw new Error("Akses ditolak");
-        result = editRowById(SHEET_BUTCHER, data.id, [data.id, data.itemName, data.netWeight, data.imageUrl || '']);
+        if (authResult.role !== 'admin' && !(authResult.permissions && authResult.permissions.includes('butcher'))) throw new Error("Akses ditolak");
+        result = editRowById(SHEET_BUTCHER, data.id, [data.id, data.itemName, data.netWeight, data.imageUrl || '', data.category || 'Bahan Baku & Potongan']);
         logAudit(ss, username, 'Edit Butcher', `Mengubah item butcher: ${data.itemName}`);
         break;
 
       case 'deleteButcherItem':
-        if (authResult.role !== 'admin') throw new Error("Akses ditolak");
+        if (authResult.role !== 'admin' && !(authResult.permissions && authResult.permissions.includes('butcher'))) throw new Error("Akses ditolak");
         result = deleteRowById(SHEET_BUTCHER, data.id);
         logAudit(ss, username, 'Hapus Butcher', `Menghapus item butcher ID: ${data.id}`);
         break;

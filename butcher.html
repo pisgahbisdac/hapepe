@@ -200,7 +200,7 @@
                         <i className="fas fa-weight-hanging"></i> {item.netWeight}
                       </div>
                       <h3 className="text-xl font-bold mt-2 text-slate-800 dark:text-white line-clamp-2">{item.itemName}</h3>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 font-medium">Bahan Baku & Potongan</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 font-medium">{item.category || 'Bahan Baku & Potongan'}</p>
                     </div>
                   </div>
                 ))}
