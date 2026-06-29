@@ -554,10 +554,20 @@
 
         const allPurchases = [...itemPurchases].sort((a, b) => new Date(b.date) - new Date(a.date));
         if (allPurchases.length > 0) {
-          const tCost = Number(allPurchases[0].totalPrice) || 0;
-          const tQty = Number(allPurchases[0].quantity) || 0;
+          const latestDate = new Date(allPurchases[0].date);
+          const nextMonthDate = new Date(latestDate.getFullYear(), latestDate.getMonth() + 1, 1);
+          const nextMonthStr = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`;
+          
+          const historicalRange = getTwoMonthsRange(nextMonthStr);
+          const historicalPurchases = allPurchases.filter(p => {
+            const pDate = new Date(p.date);
+            return pDate >= historicalRange.startDate && pDate < historicalRange.endDate;
+          });
+
+          const tCost = historicalPurchases.reduce((s, p) => s + (Number(p.totalPrice) || 0), 0);
+          const tQty = historicalPurchases.reduce((s, p) => s + (Number(p.quantity) || 0), 0);
           let price = tQty > 0 ? tCost / tQty : 0;
-          return { price: isNaN(price) ? 0 : price, status: 'latest_fallback', details: { type: 'latest_fallback', transactions: [allPurchases[0]], totalCost: tCost, totalQty: tQty } };
+          return { price: isNaN(price) ? 0 : price, status: 'latest_fallback', details: { type: 'latest_fallback', transactions: historicalPurchases, totalCost: tCost, totalQty: tQty } };
         }
         return { price: 0, status: 'no_data', details: { type: 'no_data', transactions: [], totalCost: 0, totalQty: 0 } };
       };
@@ -1467,18 +1477,18 @@
             const canvas = document.createElement('canvas');
             let width = img.width;
             let height = img.height;
-            const maxSize = 800;
+            const maxSize = 300; // Dikurangi agar tidak melebihi limit 50,000 karakter Google Sheets
             if (width > height && width > maxSize) { height *= maxSize / width; width = maxSize; } 
             else if (height > maxSize) { width *= maxSize / height; height = maxSize; }
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5); // Kualitas diturunkan sedikit
             
             const updatedItems = butcherItems.map(b => b.id === id ? { ...b, imageUrl: compressedBase64 } : b);
             setButcherItems(updatedItems);
-            const targetItem = updatedItems.find(b => b.id === id);
+            const targetItem = { ...updatedItems.find(b => b.id === id) };
             if (targetItem) sendApiRequest('editButcherItem', targetItem);
             
             setIsUploadingImage(false);
@@ -3609,19 +3619,36 @@
                   {selectedPriceDetailItem.priceDetails.type === 'latest_fallback' && (
                     <div className="space-y-4">
                       <div className="bg-orange-50 text-orange-800 p-4 rounded-xl text-sm border border-orange-100">
-                        <i className="fas fa-exclamation-triangle mr-2"></i> Tidak ada pembelian dalam 2 bulan terakhir. Harga menggunakan <strong>Riwayat Pembelian Terakhir</strong>.
+                        <i className="fas fa-exclamation-triangle mr-2"></i> Tidak ada pembelian dalam 2 bulan terakhir. Harga menggunakan <strong>Rata-rata 2 Bulan Historis</strong> dari tanggal transaksi terakhir.
                       </div>
-                      <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-200">
-                        <span className="font-semibold text-slate-600">Tanggal Transaksi</span>
-                        <span className="font-bold">{new Date(selectedPriceDetailItem.priceDetails.transactions[0].date).toLocaleDateString('id-ID')}</span>
-                      </div>
-                      <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-200">
-                        <span className="font-semibold text-slate-600">Kuantitas & Biaya</span>
-                        <span className="font-bold">{formatNum(selectedPriceDetailItem.priceDetails.totalQty)} {selectedPriceDetailItem.unit} = Rp {formatNum(selectedPriceDetailItem.priceDetails.totalCost)}</span>
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                              <th className="py-3 px-4 text-left font-semibold text-slate-600">Tanggal Transaksi Historis</th>
+                              <th className="py-3 px-4 text-right font-semibold text-slate-600">Total Harga</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {selectedPriceDetailItem.priceDetails.transactions.map((trx, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50">
+                                <td className="py-3 px-4 font-medium text-slate-700">{trx.date}</td>
+                                <td className="py-3 px-4 text-right font-bold text-slate-800">Rp {formatNum(Number(trx.totalPrice))}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot className="bg-orange-50/50 border-t border-slate-200 font-bold">
+                            <tr>
+                              <td className="py-3 px-4 text-slate-700 text-right">Total Akumulasi ({formatNum(selectedPriceDetailItem.priceDetails.totalQty)} {selectedPriceDetailItem.unit}) :</td>
+                              <td className="py-3 px-4 text-right text-orange-600">Rp {formatNum(selectedPriceDetailItem.priceDetails.totalCost)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
                       </div>
                       <div className="p-4 bg-orange-500 text-white rounded-xl shadow-inner text-center">
-                        <p className="text-sm opacity-90 mb-1">Harga Historis per Satuan</p>
-                        <p className="text-2xl font-black">Rp {formatNum(selectedPriceDetailItem.price)}</p>
+                        <p className="text-sm opacity-90 mb-1">Harga Historis Rata-rata per Satuan</p>
+                        <p className="text-2xl font-black">Rp {formatNum(Math.round(selectedPriceDetailItem.price))}</p>
+                        <p className="text-xs opacity-80 mt-2">Rumus: Total Biaya Historis ÷ Total Kuantitas Historis</p>
                       </div>
                     </div>
                   )}
