@@ -229,7 +229,10 @@
       const [username, setUsername] = useState('');
       const [password, setPassword] = useState('');
       const [userRole, setUserRole] = useState('');
+      const [userPermissions, setUserPermissions] = useState([]);
       const [usersList, setUsersList] = useState([]);
+      const [auditLogs, setAuditLogs] = useState([]);
+      const [searchAudit, setSearchAudit] = useState('');
       const [loginError, setLoginError] = useState('');
       const [isLoggingIn, setIsLoggingIn] = useState(false);
 
@@ -249,7 +252,7 @@
 
       const [showUserModal, setShowUserModal] = useState(false);
       const [editingUser, setEditingUser] = useState(null);
-      const [newUser, setNewUser] = useState({ username: '', password: '', role: 'admin' });
+      const [newUser, setNewUser] = useState({ username: '', password: '', role: 'admin', permissions: ['purchases', 'simulasi', 'katalog', 'inventory'] });
 
       const [searchBahan, setSearchBahan] = useState('');
       const [filterBulan, setFilterBulan] = useState('');
@@ -316,12 +319,15 @@
                 };
               });
               setRecipes(loadedRecipes);
-              setSales(res.data.sales || []);
-              setAdjustments(res.data.adjustments || []);
-              setCustomConversions(res.data.conversions || []);
-              setUserRole(res.data.role || 'staff');
-              setActiveTab(res.data.role === 'admin' ? 'recipes' : 'purchases');
+              if (res.data.sales) setSales(res.data.sales);
+              if (res.data.adjustments) setAdjustments(res.data.adjustments);
+              if (res.data.conversions) setCustomConversions(res.data.conversions);
               if (res.data.users) setUsersList(res.data.users);
+              if (res.data.auditLogs) setAuditLogs(res.data.auditLogs);
+              
+              setUserRole(res.data.role || 'staff');
+              setUserPermissions(res.data.permissions && res.data.permissions.length > 0 ? res.data.permissions : (res.data.role === 'admin' ? [] : ['purchases', 'simulasi', 'katalog', 'inventory']));
+              setActiveTab(res.data.role === 'admin' ? 'recipes' : 'purchases');
             } else if (res.status === 'unauthorized') {
               setIsLoggedIn(false);
               setLoginError(res.message || 'Sandi salah');
@@ -483,6 +489,16 @@
         }, 0);
       };
 
+      const purchasesByItem = useMemo(() => {
+        const map = new Map();
+        purchases.forEach(p => {
+          const name = String(p.itemName || '').toLowerCase();
+          if (!map.has(name)) map.set(name, []);
+          map.get(name).push(p);
+        });
+        return map;
+      }, [purchases]);
+
       const getAveragePrice = (itemName, visited = new Set()) => {
         const searchStr = String(itemName || '').toLowerCase();
 
@@ -497,10 +513,12 @@
           return { price: totalHPP / yieldData.qty, status: 'sub_recipe', details: { type: 'sub_recipe', recipe: isRecipeMatch, totalHPP, yieldData } };
         }
 
+        const itemPurchases = purchasesByItem.get(searchStr) || [];
         const { startDate, endDate } = getTwoMonthsRange(inventoryFilterMonth);
-        const recentPurchases = purchases.filter(p => {
+        
+        const recentPurchases = itemPurchases.filter(p => {
           const pDate = new Date(p.date);
-          return String(p.itemName || '').toLowerCase() === searchStr && pDate >= startDate && pDate < endDate;
+          return pDate >= startDate && pDate < endDate;
         });
 
         if (recentPurchases.length > 0) {
@@ -510,7 +528,7 @@
           return { price: isNaN(price) ? 0 : price, status: 'avg_2_months', details: { type: 'avg_2_months', transactions: recentPurchases, totalCost: tCost, totalQty: tQty } };
         }
 
-        const allPurchases = purchases.filter(p => String(p.itemName || '').toLowerCase() === searchStr).sort((a, b) => new Date(b.date) - new Date(a.date));
+        const allPurchases = [...itemPurchases].sort((a, b) => new Date(b.date) - new Date(a.date));
         if (allPurchases.length > 0) {
           const tCost = Number(allPurchases[0].totalPrice) || 0;
           const tQty = Number(allPurchases[0].quantity) || 0;
@@ -715,15 +733,29 @@
       };
 
       // ==========================================
+      // MEMOIZED RECIPE STATS
+      // ==========================================
+      const recipeStatsMap = useMemo(() => {
+        const map = new Map();
+        recipes.forEach(recipe => {
+          map.set(recipe.id, {
+            hpp: calculateRecipeHPP(recipe.id),
+            maxPortions: calculateMaxPortions(recipe.id)
+          });
+        });
+        return map;
+      }, [recipes, purchasesByItem, inventoryData, inventoryFilterMonth, editingRecipeData]);
+
+      // ==========================================
       // MEMOIZED RENDERERS
       // ==========================================
       const renderedRecipeCards = useMemo(() => {
         return [...recipes].filter(r => r.menuName.toLowerCase().includes(searchCosting.toLowerCase()) && (!filterCostingCategory || r.menuCategory === filterCostingCategory)).sort((a, b) => (a.isActive === false ? 1 : 0) - (b.isActive === false ? 1 : 0)).map(recipe => {
-          const hppBahan = calculateRecipeHPP(recipe.id);
+          const hppBahan = recipeStatsMap.get(recipe.id)?.hpp || 0;
           const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
           const profitPerPorsi = hargaJualIdeal - hppBahan;
           const bepPorsi = profitPerPorsi > 0 ? Math.ceil(totalOverheadMonthly / profitPerPorsi) : 0;
-          const maxPortions = calculateMaxPortions(recipe.id);
+          const maxPortions = recipeStatsMap.get(recipe.id)?.maxPortions || 0;
 
           return (
             <div
@@ -850,7 +882,7 @@
       };
 
       const handleExportCostingExcel = (recipe) => {
-        const hppBahan = calculateRecipeHPP(recipe.id);
+        const hppBahan = recipeStatsMap.get(recipe.id)?.hpp || 0;
         const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
         const profitPerPorsi = hargaJualIdeal - hppBahan;
 
@@ -904,7 +936,7 @@
       const handleExportKatalogExcel = () => {
         const headers = ['Kategori', 'Nama Menu', 'HPP / Porsi', 'Margin (%)', 'Harga Jual Ideal'];
         const rows = recipes.filter(r => r.recipeType !== 'sub').map(recipe => {
-          const hppBahan = calculateRecipeHPP(recipe.id);
+          const hppBahan = recipeStatsMap.get(recipe.id)?.hpp || 0;
           const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
           return [
             `"${recipe.menuCategory || '-'}"`,
@@ -1081,7 +1113,7 @@
         }
         setShowUserModal(false);
         setEditingUser(null);
-        setNewUser({ username: '', password: '', role: 'admin' });
+        setNewUser({ username: '', password: '', role: 'admin', permissions: ['purchases', 'simulasi', 'katalog', 'inventory'] });
       };
 
       const handleDeleteUser = (id) => {
@@ -1622,37 +1654,50 @@
 
             {/* Tab Navigation */}
             <div className="flex space-x-2 bg-white p-2 rounded-xl shadow-sm border border-slate-200 overflow-x-auto print-hide">
-              <button onClick={() => setActiveTab('purchases')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'purchases' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-                <i className="fas fa-shopping-cart"></i> 1. Data Bahan Baku
-              </button>
-              {userRole === 'admin' && (
+              {(userRole === 'admin' || userPermissions.includes('purchases')) && (
+                <button onClick={() => setActiveTab('purchases')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'purchases' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+                  <i className="fas fa-shopping-cart"></i> 1. Data Bahan Baku
+                </button>
+              )}
+              {(userRole === 'admin' || userPermissions.includes('overhead')) && (
                 <button onClick={() => setActiveTab('overhead')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'overhead' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
                   <i className="fas fa-file-invoice-dollar"></i> 2. Biaya Operasional
                 </button>
               )}
-              {userRole === 'admin' && (
+              {(userRole === 'admin' || userPermissions.includes('recipes')) && (
                 <button onClick={() => setActiveTab('recipes')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'recipes' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
                   <i className="fas fa-utensils"></i> 3. Costing & Harga Jual
                 </button>
               )}
-              <button onClick={() => setActiveTab('simulasi')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'simulasi' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
-                <i className="fas fa-chart-pie"></i> 4. Simulasi Bisnis
-              </button>
-              <button onClick={() => setActiveTab('katalog')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'katalog' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
-                <i className="fas fa-search"></i> 5. Katalog Menu
-              </button>
-              <button onClick={() => setActiveTab('inventory')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'inventory' ? 'bg-orange-600 text-white shadow-md' : 'text-slate-500 hover:bg-orange-50 hover:text-orange-600'}`}>
-                <i className="fas fa-boxes"></i> 6. Inventory & Stok
-              </button>
+              {(userRole === 'admin' || userPermissions.includes('simulasi')) && (
+                <button onClick={() => setActiveTab('simulasi')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'simulasi' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
+                  <i className="fas fa-chart-pie"></i> 4. Simulasi Bisnis
+                </button>
+              )}
+              {(userRole === 'admin' || userPermissions.includes('katalog')) && (
+                <button onClick={() => setActiveTab('katalog')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'katalog' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
+                  <i className="fas fa-search"></i> 5. Katalog Menu
+                </button>
+              )}
+              {(userRole === 'admin' || userPermissions.includes('inventory')) && (
+                <button onClick={() => setActiveTab('inventory')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'inventory' ? 'bg-orange-600 text-white shadow-md' : 'text-slate-500 hover:bg-orange-50 hover:text-orange-600'}`}>
+                  <i className="fas fa-boxes"></i> 6. Inventory & Stok
+                </button>
+              )}
               {userRole === 'admin' && (
                 <button onClick={() => setActiveTab('users')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-blue-50 hover:text-blue-600'}`}>
                   <i className="fas fa-users-cog"></i> 7. Pengaturan Akun
                 </button>
               )}
+              {userRole === 'admin' && (
+                <button onClick={() => setActiveTab('audit')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'audit' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-purple-50 hover:text-purple-600'}`}>
+                  <i className="fas fa-history"></i> 8. Riwayat Aktivitas
+                </button>
+              )}
             </div>
 
             {/* TAB 1: PEMBELIAN */}
-            {activeTab === 'purchases' && (
+            {activeTab === 'purchases' && (userRole === 'admin' || userPermissions.includes('purchases')) && (
               <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 <div className="lg:col-span-1 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-fit">
                   <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2">
@@ -1830,7 +1875,7 @@
             )}
 
             {/* TAB 2: OVERHEAD */}
-            {activeTab === 'overhead' && userRole === 'admin' && (
+            {activeTab === 'overhead' && (userRole === 'admin' || userPermissions.includes('overhead')) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                   <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2">
@@ -1888,7 +1933,7 @@
             )}
 
             {/* TAB 3: COSTING */}
-            {activeTab === 'recipes' && userRole === 'admin' && (
+            {activeTab === 'recipes' && (userRole === 'admin' || userPermissions.includes('recipes')) && (
               <div className="space-y-6">
 
                 {/* Buat Menu Baru */}
@@ -1973,11 +2018,11 @@
                     const updateDraft = (updates) => setEditingRecipeData({ ...recipe, ...updates });
 
                     if (!recipe) return null;
-                    const hppBahan = calculateRecipeHPP(recipe.id);
+                    const hppBahan = recipeStatsMap.get(recipe.id)?.hpp || 0;
                     const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
                     const profitPerPorsi = hargaJualIdeal - hppBahan;
                     const bepPorsi = profitPerPorsi > 0 ? Math.ceil(totalOverheadMonthly / profitPerPorsi) : 0;
-                    const maxPortions = calculateMaxPortions(recipe.id);
+                    const maxPortions = recipeStatsMap.get(recipe.id)?.maxPortions || 0;
 
                     return ReactDOM.createPortal(
                       <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }} className="bg-slate-50 flex flex-col overflow-hidden w-full h-full print-area">
@@ -2662,7 +2707,7 @@
             )}
 
             {/* TAB 4: SIMULASI */}
-            {activeTab === 'simulasi' && (
+            {activeTab === 'simulasi' && (userRole === 'admin' || userPermissions.includes('simulasi')) && (
               <div className="space-y-6">
                 {/* Dashboard Analisa Simulasi */}
                 {(() => {
@@ -2670,12 +2715,15 @@
                   let totalHPP = 0;
 
                   recipes.filter(r => r.recipeType !== 'sub').forEach(recipe => {
-                    const hppBahan = calculateRecipeHPP(recipe.id);
+                    const hppBahan = recipeStatsMap.get(recipe.id)?.hpp || 0;
                     const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
 
                     const qtyTerjual = salesSimulation[recipe.id] || 0;
-                    totalOmset += hargaJualIdeal * qtyTerjual;
-                    totalHPP += hppBahan * qtyTerjual;
+                    if (qtyTerjual > 0) {
+                      const validHargaJual = isFinite(hargaJualIdeal) && !isNaN(hargaJualIdeal) ? hargaJualIdeal : 0;
+                      totalOmset += validHargaJual * qtyTerjual;
+                      totalHPP += hppBahan * qtyTerjual;
+                    }
                   });
 
                   const labaKotor = totalOmset - totalHPP;
@@ -2756,7 +2804,7 @@
                       </thead>
                       <tbody className="divide-y divide-slate-100 block md:table-row-group">
                         {recipes.filter(r => r.recipeType !== 'sub').filter(r => r.menuName.toLowerCase().includes(searchSimulasi.toLowerCase())).map(recipe => {
-                          const hppBahan = calculateRecipeHPP(recipe.id);
+                          const hppBahan = recipeStatsMap.get(recipe.id)?.hpp || 0;
                           const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
                           const profitPerPorsi = hargaJualIdeal - hppBahan;
 
@@ -2797,7 +2845,7 @@
             )}
 
             {/* TAB 5: KATALOG & PENCARIAN */}
-            {activeTab === 'katalog' && (
+            {activeTab === 'katalog' && (userRole === 'admin' || userPermissions.includes('katalog')) && (
               <div className="space-y-6">
                 <div className="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col sm:flex-row gap-4 print-hide">
                   <div className="relative flex-1">
@@ -2856,7 +2904,7 @@
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                   {recipes.filter(r => r.recipeType !== 'sub' && r.menuName.toLowerCase().includes(searchKatalog.toLowerCase()) && (!filterKatalogCategory || r.menuCategory === filterKatalogCategory)).map(recipe => {
-                    const hppBahan = calculateRecipeHPP(recipe.id);
+                    const hppBahan = recipeStatsMap.get(recipe.id)?.hpp || 0;
                     const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
 
                     return (
@@ -2879,8 +2927,8 @@
                         </div>
                         <div className="p-3 flex flex-col h-full">
                           <h3 className="font-black text-sm text-slate-800 mb-2 line-clamp-2 leading-tight">{recipe.menuName}</h3>
-                          <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded border mb-4 w-max ${calculateMaxPortions(recipe.id) === 0 ? 'text-rose-600 bg-rose-50 border-rose-200' : 'text-emerald-600 bg-emerald-50 border-emerald-100'}`} title="Berdasarkan sisa stok inventori">
-                            <i className="fas fa-boxes"></i> Bisa dibuat: {calculateMaxPortions(recipe.id)} {recipe.yieldUnit}
+                          <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded border mb-4 w-max ${(recipeStatsMap.get(recipe.id)?.maxPortions || 0) === 0 ? 'text-rose-600 bg-rose-50 border-rose-200' : 'text-emerald-600 bg-emerald-50 border-emerald-100'}`} title="Berdasarkan sisa stok inventori">
+                            <i className="fas fa-boxes"></i> Bisa dibuat: {recipeStatsMap.get(recipe.id)?.maxPortions || 0} {recipe.yieldUnit}
                           </div>
                           <div className="flex justify-between items-center pt-4 border-t border-slate-100">
                             <div>
@@ -2909,7 +2957,7 @@
             {/* MODAL RINCIAN MENU */}
             {selectedKatalogMenu && (() => {
               const recipe = selectedKatalogMenu;
-              const hppBahan = calculateRecipeHPP(recipe.id);
+              const hppBahan = recipeStatsMap.get(recipe.id)?.hpp || 0;
               const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
               const profitPerPorsi = hargaJualIdeal - hppBahan;
 
@@ -2937,8 +2985,8 @@
                         <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
                           <i className="fas fa-check-circle"></i> Resep untuk {formatNum(getRecipeYield(recipe).qty)} {getRecipeYield(recipe).unit}
                         </div>
-                        <div className={`inline-flex items-center gap-2 text-xs font-bold px-3 py-1 rounded-full border ${calculateMaxPortions(recipe.id) === 0 ? 'text-rose-600 bg-rose-50 border-rose-200' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`} title="Berdasarkan stok bahan baku yang tersisa di inventori saat ini">
-                          <i className="fas fa-boxes"></i> Bisa dibuat: {calculateMaxPortions(recipe.id)} {getRecipeYield(recipe).unit}
+                        <div className={`inline-flex items-center gap-2 text-xs font-bold px-3 py-1 rounded-full border ${(recipeStatsMap.get(recipe.id)?.maxPortions || 0) === 0 ? 'text-rose-600 bg-rose-50 border-rose-200' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`} title="Berdasarkan stok bahan baku yang tersisa di inventori saat ini">
+                          <i className="fas fa-boxes"></i> Bisa dibuat: {recipeStatsMap.get(recipe.id)?.maxPortions || 0} {getRecipeYield(recipe).unit}
                         </div>
                       </div>
 
@@ -3073,13 +3121,14 @@
             })()}
 
             {/* TAB 6: INVENTORY & PENJUALAN */}
-            {activeTab === 'inventory' && (
+            {activeTab === 'inventory' && (userRole === 'admin' || userPermissions.includes('inventory')) && (
               <div className="space-y-6">
 
                 {/* Atas: Input Penjualan & Penyesuaian */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
                   {/* Form Penjualan */}
+                  {(userRole === 'admin' || userPermissions.includes('inv_sales')) && (
                   <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                     <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2 text-emerald-700">
                       <i className="fas fa-cash-register"></i> Input Penjualan (Stock Out)
@@ -3104,8 +3153,10 @@
                       </button>
                     </form>
                   </div>
+                  )}
 
                   {/* Form Penyesuaian Manual */}
+                  {(userRole === 'admin' || userPermissions.includes('inv_adjustments')) && (
                   <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                     <h2 className="text-lg font-bold mb-4 border-b pb-2 flex items-center gap-2 text-orange-600">
                       <i className="fas fa-exclamation-triangle"></i> Penyesuaian Manual (Buang/Rusak)
@@ -3119,21 +3170,16 @@
                           {uniqueItems.map((item, idx) => <option key={idx} value={item.name} />)}
                         </datalist>
                       </div>
-                      <div className="flex gap-2">
-                        <div className="flex-1">
-                          <label className="text-sm font-semibold">Jumlah (Qty)</label>
-                          <input type="text" inputMode="decimal" placeholder="Contoh: 5" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500" value={newAdjustment.quantity} onChange={e => setNewAdjustment({ ...newAdjustment, quantity: formatQtyInput(e.target.value) })} required />
-                        </div>
-                        <div className="flex-1">
-                          <label className="text-sm font-semibold">Alasan</label>
-                          <input type="text" placeholder="Contoh: Basi, Tumpah" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500" value={newAdjustment.reason} onChange={e => setNewAdjustment({ ...newAdjustment, reason: e.target.value })} required />
-                        </div>
+                      <div className="flex gap-4">
+                        <div className="flex-1"><label className="text-sm font-semibold">Kuantitas Terbuang</label><input type="text" inputMode="decimal" placeholder="Misal: 0.5" className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500" value={newAdjustment.quantity} onChange={e => setNewAdjustment({ ...newAdjustment, quantity: formatQtyInput(e.target.value) })} required /></div>
+                        <div className="flex-1"><label className="text-sm font-semibold">Alasan</label><input type="text" placeholder="Rusak, tumpah..." className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500" value={newAdjustment.reason} onChange={e => setNewAdjustment({ ...newAdjustment, reason: e.target.value })} required /></div>
                       </div>
                       <button type="submit" className="w-full bg-orange-600 hover:bg-orange-700 text-white p-3 rounded-lg font-bold flex justify-center items-center gap-2">
-                        <i className="fas fa-save"></i> Simpan Penyesuaian
+                        <i className="fas fa-minus-circle"></i> Potong Stok
                       </button>
                     </form>
                   </div>
+                  )}
                 </div>
 
                 {/* Tabel Dashboard Stok */}
@@ -3415,7 +3461,7 @@
                 </h2>
                 <button onClick={() => {
                   setEditingUser(null);
-                  setNewUser({ username: '', password: '', role: 'admin' });
+                  setNewUser({ username: '', password: '', role: 'admin', permissions: ['purchases', 'simulasi', 'katalog', 'inventory'] });
                   setShowUserModal(true);
                 }} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold shadow-md transition-colors flex items-center gap-2">
                   <i className="fas fa-user-plus"></i> Tambah Akun
@@ -3450,7 +3496,7 @@
                           <div className="flex justify-center gap-2">
                             <button onClick={() => {
                               setEditingUser(u);
-                              setNewUser({ username: u.username, password: u.password, role: u.role });
+                              setNewUser({ username: u.username, password: u.password, role: u.role, permissions: u.permissions || [] });
                               setShowUserModal(true);
                             }} className="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 rounded-lg transition-colors" title="Edit Akun">
                               <i className="fas fa-edit"></i>
@@ -3473,6 +3519,71 @@
 
               <div className="mt-4 bg-blue-50 p-4 rounded-xl border border-blue-100 text-sm text-blue-800">
                 <i className="fas fa-info-circle mr-2"></i> Role <strong>Admin</strong> memiliki akses penuh ke seluruh fitur dan pengaturan aplikasi. Saat ini, semua role diset sebagai admin untuk sementara.
+              </div>
+            </div>
+          )}
+          
+          {/* TAB 8: RIWAYAT AKTIVITAS (AUDIT TRAIL) */}
+          {activeTab === 'audit' && userRole === 'admin' && (
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 border-b pb-4 gap-4">
+                <h2 className="text-xl font-bold flex items-center gap-2 text-purple-800">
+                  <i className="fas fa-history"></i> Riwayat Aktivitas
+                </h2>
+                <div className="relative w-full md:w-64">
+                  <input
+                    type="text"
+                    placeholder="Cari aktivitas..."
+                    className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-purple-500"
+                    value={searchAudit}
+                    onChange={(e) => setSearchAudit(e.target.value)}
+                  />
+                  <i className="fas fa-search absolute left-3 top-3 text-slate-400"></i>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-100 text-slate-700">
+                    <tr>
+                      <th className="p-4 rounded-tl-xl font-bold">Waktu</th>
+                      <th className="p-4 font-bold">Pengguna</th>
+                      <th className="p-4 font-bold">Aksi</th>
+                      <th className="p-4 rounded-tr-xl font-bold">Detail</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {auditLogs
+                      .filter(log => log.username.toLowerCase().includes(searchAudit.toLowerCase()) || 
+                                     log.action.toLowerCase().includes(searchAudit.toLowerCase()) || 
+                                     log.details.toLowerCase().includes(searchAudit.toLowerCase()))
+                      .map((log, i) => {
+                        // format tanggal ISO ke format lokal
+                        let tglStr = log.timestamp;
+                        try {
+                           const d = new Date(log.timestamp);
+                           tglStr = d.toLocaleString('id-ID', {day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'});
+                        } catch(e) {}
+                        return (
+                          <tr key={i} className="hover:bg-slate-50">
+                            <td className="p-4 text-slate-500 whitespace-nowrap">{tglStr}</td>
+                            <td className="p-4 font-bold text-slate-700">@{log.username}</td>
+                            <td className="p-4">
+                              <span className="px-2 py-1 rounded bg-purple-100 text-purple-700 font-bold text-xs">
+                                {log.action}
+                              </span>
+                            </td>
+                            <td className="p-4 text-slate-600">{log.details}</td>
+                          </tr>
+                        );
+                      })}
+                    {auditLogs.length === 0 && (
+                      <tr>
+                        <td colSpan="4" className="text-center p-8 text-slate-500">Belum ada riwayat aktivitas yang terekam.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -3511,6 +3622,40 @@
                         ]}
                       />
                     </div>
+                    {newUser.role === 'staff' && (
+                      <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                        <label className="text-sm font-bold mb-3 block text-slate-700">Akses Menu Spesifik</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {[
+                            { id: 'purchases', label: '1. Data Bahan Baku' },
+                            { id: 'overhead', label: '2. Biaya Operasional' },
+                            { id: 'recipes', label: '3. Costing & Harga Jual' },
+                            { id: 'simulasi', label: '4. Simulasi Bisnis' },
+                            { id: 'katalog', label: '5. Katalog Menu' },
+                            { id: 'inventory', label: '6. Akses Laporan Inventory' },
+                            { id: 'inv_sales', label: '↳ Boleh Input Penjualan' },
+                            { id: 'inv_adjustments', label: '↳ Boleh Input Penyesuaian Manual' }
+                          ].map(menu => (
+                            <label key={menu.id} className="flex items-center gap-2.5 cursor-pointer hover:bg-slate-100 p-2 rounded-lg transition-colors border border-transparent hover:border-slate-200">
+                              <input 
+                                type="checkbox" 
+                                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                                checked={newUser.permissions?.includes(menu.id)}
+                                onChange={() => {
+                                  let perms = newUser.permissions || [];
+                                  if (perms.includes(menu.id)) {
+                                    setNewUser({ ...newUser, permissions: perms.filter(id => id !== menu.id) });
+                                  } else {
+                                    setNewUser({ ...newUser, permissions: [...perms, menu.id] });
+                                  }
+                                }}
+                              />
+                              <span className="text-xs font-semibold text-slate-700">{menu.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="pt-4 flex gap-3">
                       <button type="button" onClick={() => setShowUserModal(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 p-3 rounded-xl font-bold transition-colors">
                         Batal

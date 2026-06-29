@@ -23,6 +23,7 @@ const SHEET_SALES = 'Sales';
 const SHEET_ADJUSTMENTS = 'Adjustments';
 const SHEET_CONVERSIONS = 'Conversions';
 const SHEET_USERS = 'Users';
+const SHEET_AUDIT = 'AuditTrail';
 /**
  * Run this function ONCE to set up the spreadsheet automatically.
  */
@@ -33,9 +34,9 @@ function setup() {
   let usersSheet = ss.getSheetByName(SHEET_USERS);
   if (!usersSheet) {
     usersSheet = ss.insertSheet(SHEET_USERS);
-    usersSheet.appendRow(['ID', 'Username', 'Password', 'Role']);
-    usersSheet.getRange("A1:D1").setFontWeight("bold");
-    usersSheet.appendRow([new Date().getTime(), 'admin', 'biev1234', 'admin']);
+    usersSheet.appendRow(['ID', 'Username', 'Password', 'Role', 'Permissions']);
+    usersSheet.getRange("A1:E1").setFontWeight("bold");
+    usersSheet.appendRow([new Date().getTime(), 'admin', 'biev1234', 'admin', '[]']);
   }
 
   // Create Purchases sheet
@@ -85,6 +86,14 @@ function setup() {
     convSheet.appendRow(['ItemName', 'PackUnit', 'BaseQty']);
     convSheet.getRange("A1:C1").setFontWeight("bold");
   }
+
+  // Create Audit Trail sheet
+  let auditSheet = ss.getSheetByName(SHEET_AUDIT);
+  if (!auditSheet) {
+    auditSheet = ss.insertSheet(SHEET_AUDIT);
+    auditSheet.appendRow(['Timestamp', 'Username', 'Action', 'Details']);
+    auditSheet.getRange("A1:D1").setFontWeight("bold");
+  }
   
   // Delete the default "Sheet1" if it exists
   const sheet1 = ss.getSheetByName('Sheet1');
@@ -93,20 +102,39 @@ function setup() {
   }
 }
 
+function logAudit(ss, username, action, details) {
+  try {
+    let sheet = ss.getSheetByName(SHEET_AUDIT);
+    if (!sheet) {
+      sheet = ss.insertSheet(SHEET_AUDIT);
+      sheet.appendRow(['Timestamp', 'Username', 'Action', 'Details']);
+      sheet.getRange("A1:D1").setFontWeight("bold");
+    }
+    const timestamp = new Date().toISOString();
+    sheet.appendRow([timestamp, username, action, details]);
+  } catch (e) {
+    // Ignore logging errors to prevent breaking main flows
+  }
+}
+
 function verifyUser(ss, inputUsername, inputPassword) {
   let sheet = ss.getSheetByName(SHEET_USERS);
   if (!sheet) {
     // Fallback if setup hasn't run, create default admin
     sheet = ss.insertSheet(SHEET_USERS);
-    sheet.appendRow(['ID', 'Username', 'Password', 'Role']);
-    sheet.getRange("A1:D1").setFontWeight("bold");
-    sheet.appendRow([new Date().getTime(), 'admin', 'biev1234', 'admin']);
+    sheet.appendRow(['ID', 'Username', 'Password', 'Role', 'Permissions']);
+    sheet.getRange("A1:E1").setFontWeight("bold");
+    sheet.appendRow([new Date().getTime(), 'admin', 'biev1234', 'admin', '[]']);
   }
   
   const data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][1]).trim() === String(inputUsername).trim() && String(data[i][2]).trim() === String(inputPassword).trim()) {
-      return { isValid: true, role: data[i][3] };
+      let permissions = [];
+      if (data[i][4]) {
+        try { permissions = JSON.parse(data[i][4]); } catch (e) {}
+      }
+      return { isValid: true, role: data[i][3], permissions: permissions };
     }
   }
   
@@ -271,16 +299,36 @@ function doGet(e) {
       const usersSheet = ss.getSheetByName(SHEET_USERS);
       let usersList = [];
       if (usersSheet) {
-        usersList = readSheetData(usersSheet).map(row => ({
-          id: row.ID,
-          username: row.Username,
-          password: row.Password,
-          role: row.Role
-        }));
+        usersList = readSheetData(usersSheet).map(row => {
+          let perms = [];
+          if (row.Permissions) {
+             try { perms = JSON.parse(row.Permissions); } catch (e) {}
+          }
+          return {
+            id: row.ID,
+            username: row.Username,
+            password: row.Password,
+            role: row.Role,
+            permissions: perms
+          };
+        });
       }
       response.data.users = usersList;
+      
+      const auditSheet = ss.getSheetByName(SHEET_AUDIT);
+      let auditLogs = [];
+      if (auditSheet) {
+        auditLogs = readSheetData(auditSheet).map(row => ({
+          timestamp: row.Timestamp,
+          username: row.Username,
+          action: row.Action,
+          details: row.Details
+        })).reverse(); // Send newest first
+      }
+      response.data.auditLogs = auditLogs;
     }
     response.data.role = authResult.role;
+    response.data.permissions = authResult.permissions || [];
     
     return createJsonResponse(response);
   } catch (error) {
@@ -440,20 +488,25 @@ function doPost(e) {
       // --- PURCHASES ---
       case 'addPurchase':
         result = addRowToSheet(SHEET_PURCHASES, [data.id, data.date, data.itemName, data.unit, data.quantity, data.totalPrice]);
+        logAudit(ss, username, 'Tambah Pembelian', `Menambahkan pembelian bahan: ${data.itemName} (${data.quantity} ${data.unit})`);
         break;
       case 'editPurchase':
         result = editRowById(SHEET_PURCHASES, data.id, [data.id, data.date, data.itemName, data.unit, data.quantity, data.totalPrice]);
+        logAudit(ss, username, 'Edit Pembelian', `Mengubah pembelian bahan: ${data.itemName} (${data.quantity} ${data.unit})`);
         break;
       case 'deletePurchase':
         result = deleteRowById(SHEET_PURCHASES, data.id);
+        logAudit(ss, username, 'Hapus Pembelian', `Menghapus pembelian (ID: ${data.id})`);
         break;
         
       // --- OVERHEAD ---
       case 'addOverhead':
         result = addRowToSheet(SHEET_OVERHEAD, [data.id, data.name, data.amount]);
+        logAudit(ss, username, 'Tambah Biaya Operasional', `Menambahkan biaya: ${data.name}`);
         break;
       case 'deleteOverhead':
         result = deleteRowById(SHEET_OVERHEAD, data.id);
+        logAudit(ss, username, 'Hapus Biaya Operasional', `Menghapus biaya operasional (ID: ${data.id})`);
         break;
         
       // --- RECIPES ---
@@ -461,28 +514,35 @@ function doPost(e) {
         const newRow = addRecipeRowData(data);
         ensureRecipeHeaders(ss, (newRow.length - 7) / 3);
         result = addRowToSheet(SHEET_RECIPES, newRow);
+        logAudit(ss, username, 'Tambah Resep', `Membuat resep baru: ${data.menuName}`);
         break;
       case 'deleteRecipe':
         result = deleteRowById(SHEET_RECIPES, data.id);
+        logAudit(ss, username, 'Hapus Resep', `Menghapus resep (ID: ${data.id})`);
         break;
       case 'updateRecipe':
         result = updateRecipeRow(data);
+        logAudit(ss, username, 'Edit Resep', `Mengubah resep: ${data.menuName || data.id}`);
         break;
         
       // --- SALES ---
       case 'addSale':
         result = addRowToSheet(SHEET_SALES, [data.id, data.date, data.recipeId, data.quantitySold, data.menuName]);
+        logAudit(ss, username, 'Input Penjualan', `Mencatat penjualan: ${data.menuName} (${data.quantitySold} porsi)`);
         break;
       case 'deleteSale':
         result = deleteRowById(SHEET_SALES, data.id);
+        logAudit(ss, username, 'Hapus Penjualan', `Menghapus catatan penjualan (ID: ${data.id})`);
         break;
         
       // --- ADJUSTMENTS ---
       case 'addAdjustment':
         result = addRowToSheet(SHEET_ADJUSTMENTS, [data.id, data.date, data.itemName, data.quantity, data.reason]);
+        logAudit(ss, username, 'Penyesuaian Manual', `Penyesuaian stok ${data.itemName}: ${data.quantity} (${data.reason})`);
         break;
       case 'deleteAdjustment':
         result = deleteRowById(SHEET_ADJUSTMENTS, data.id);
+        logAudit(ss, username, 'Hapus Penyesuaian', `Menghapus penyesuaian manual (ID: ${data.id})`);
         break;
         
       // --- CONVERSIONS ---
@@ -505,6 +565,7 @@ function doPost(e) {
         } else {
           result = { success: true };
         }
+        logAudit(ss, username, 'Simpan Konversi', `Mengatur satuan konversi untuk: ${data.itemName}`);
         break;
       case 'deleteConversion':
         const cSheet = ss.getSheetByName(SHEET_CONVERSIONS);
@@ -518,20 +579,24 @@ function doPost(e) {
           }
         }
         result = { success: true };
+        logAudit(ss, username, 'Hapus Konversi', `Menghapus konversi untuk: ${data.itemName}`);
         break;
 
       // --- USERS ---
       case 'addUser':
         if (authResult.role !== 'admin') throw new Error("Unauthorized");
-        result = addRowToSheet(SHEET_USERS, [data.id, data.username, data.password, data.role]);
+        result = addRowToSheet(SHEET_USERS, [data.id, data.username, data.password, data.role, data.permissions ? JSON.stringify(data.permissions) : '[]']);
+        logAudit(ss, username, 'Tambah Pengguna', `Membuat akun pengguna baru: ${data.username}`);
         break;
       case 'editUser':
         if (authResult.role !== 'admin') throw new Error("Unauthorized");
-        result = editRowById(SHEET_USERS, data.id, [data.id, data.username, data.password, data.role]);
+        result = editRowById(SHEET_USERS, data.id, [data.id, data.username, data.password, data.role, data.permissions ? JSON.stringify(data.permissions) : '[]']);
+        logAudit(ss, username, 'Edit Pengguna', `Mengubah akun pengguna: ${data.username}`);
         break;
       case 'deleteUser':
         if (authResult.role !== 'admin') throw new Error("Unauthorized");
         result = deleteRowById(SHEET_USERS, data.id);
+        logAudit(ss, username, 'Hapus Pengguna', `Menghapus akun pengguna (ID: ${data.id})`);
         break;
 
       default:

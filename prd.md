@@ -54,6 +54,9 @@ Aplikasi menggunakan arsitektur *Serverless* yang sangat hemat biaya:
 ## 4. Security & Access
 - Terdapat sistem *Login* sederhana berbasis sandi/PIN statis di Frontend (disinkronisasi dengan variabel di Google Script).
 - Google Spreadsheet diatur tertutup untuk publik, hanya diakses melalui URL eksekusi web app Google Script.
+- **Role Management & Access Control:**
+  - **Admin:** Memiliki akses penuh ke seluruh fitur dan pengaturan aplikasi (Data Bahan Baku, Biaya Operasional, Costing & Harga Jual, Simulasi Bisnis, Katalog Menu, Inventory & Stok, dan Pengaturan Akun).
+  - **Staff:** Memiliki akses terbatas yang disesuaikan untuk operasional harian. **Tidak memiliki akses** ke data sensitif seperti Biaya Operasional, Costing & Harga Jual, serta Pengaturan Akun. Staf hanya dapat mengakses: Data Bahan Baku, Simulasi Bisnis, Katalog Menu, dan Inventory & Stok.
 
 ## 5. Future Development (Roadmap)
 - Integrasi ke Printer Thermal/Bluetooth POS.
