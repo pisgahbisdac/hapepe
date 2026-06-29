@@ -2108,10 +2108,10 @@
                 {recipes.length > 0 && (
                   <div className="flex flex-wrap gap-3 items-center">
                     <span className="bg-white border border-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
-                      <i className="fas fa-utensils text-emerald-500"></i> Total: {recipes.length}
+                      <i className="fas fa-utensils text-emerald-500"></i> Total (Semua): {recipes.length}
                     </span>
-                    <span className="bg-white border border-emerald-200 text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
-                      <i className="fas fa-store"></i> Menu Jual: {recipes.filter(r => r.recipeType !== 'sub').length}
+                    <span className="bg-white border border-emerald-200 text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5" title="Sama dengan jumlah di Katalog Dapur">
+                      <i className="fas fa-store"></i> Menu Jual (Aktif): {recipes.filter(r => r.recipeType !== 'sub' && r.isActive !== false).length}
                     </span>
                     <span className="bg-white border border-amber-200 text-amber-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
                       <i className="fas fa-box-open"></i> Bahan 1/2 Jadi: {recipes.filter(r => r.recipeType === 'sub').length}
@@ -3151,10 +3151,10 @@
                 <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                   <div className="flex flex-wrap gap-3 items-center">
                     <span className="bg-white border border-slate-200 text-slate-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
-                      <i className="fas fa-utensils text-emerald-500"></i> Total: {recipes.length}
+                      <i className="fas fa-utensils text-emerald-500"></i> Total (Semua): {recipes.length}
                     </span>
-                    <span className="bg-white border border-emerald-200 text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
-                      <i className="fas fa-store"></i> Menu Jual: {recipes.filter(r => r.recipeType !== 'sub').length}
+                    <span className="bg-white border border-emerald-200 text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5" title="Sama dengan jumlah di Katalog Dapur">
+                      <i className="fas fa-store"></i> Menu Jual (Aktif): {recipes.filter(r => r.recipeType !== 'sub' && r.isActive !== false).length}
                     </span>
                     <span className="bg-white border border-amber-200 text-amber-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5">
                       <i className="fas fa-box-open"></i> Bahan 1/2 Jadi: {recipes.filter(r => r.recipeType === 'sub').length}
