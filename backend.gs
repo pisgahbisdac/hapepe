@@ -283,6 +283,10 @@ function doGet(e) {
     const butcherSheet = ss.getSheetByName(SHEET_BUTCHER);
     let butcherItems = [];
     if (butcherSheet) {
+      const headers = butcherSheet.getRange(1, 1, 1, butcherSheet.getLastColumn()).getValues()[0];
+      if (headers.indexOf('Category') === -1) {
+        butcherSheet.getRange(1, headers.length + 1).setValue('Category');
+      }
       butcherItems = readSheetData(butcherSheet).map(row => ({
         id: row.ID,
         itemName: row.ItemName,
@@ -497,6 +501,12 @@ function doPost(e) {
       let butcherItems = [];
       const butcherSheet = ss.getSheetByName(SHEET_BUTCHER);
       if (butcherSheet) {
+        // Ensure header exists for Category
+        const headers = butcherSheet.getRange(1, 1, 1, butcherSheet.getLastColumn()).getValues()[0];
+        if (headers.indexOf('Category') === -1) {
+          butcherSheet.getRange(1, headers.length + 1).setValue('Category');
+        }
+        
         butcherItems = readSheetData(butcherSheet).map(row => ({
           id: row.ID,
           itemName: row.ItemName,
@@ -654,6 +664,13 @@ function doPost(e) {
 
       case 'editButcherItem':
         if (authResult.role !== 'admin' && !(authResult.permissions && authResult.permissions.includes('butcher'))) throw new Error("Akses ditolak");
+        const bSheetEdit = ss.getSheetByName(SHEET_BUTCHER);
+        if (bSheetEdit) {
+          const editHeaders = bSheetEdit.getRange(1, 1, 1, bSheetEdit.getLastColumn()).getValues()[0];
+          if (editHeaders.indexOf('Category') === -1) {
+            bSheetEdit.getRange(1, editHeaders.length + 1).setValue('Category');
+          }
+        }
         result = editRowById(SHEET_BUTCHER, data.id, [data.id, data.itemName, data.netWeight, data.imageUrl || '', data.category || 'Bahan Baku & Potongan']);
         logAudit(ss, username, 'Edit Butcher', `Mengubah item butcher: ${data.itemName}`);
         break;

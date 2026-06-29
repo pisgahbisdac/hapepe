@@ -2203,6 +2203,23 @@
                                 <i className="fas fa-utensils"></i> <span className="hidden sm:inline">Resep Dapur (PDF)</span>
                               </button>
                               {!isCreatingNewRecipe && (
+                                <button onClick={() => {
+                                  let newName = `Salinan - ${recipe.menuName}`;
+                                  let counter = 1;
+                                  while (recipes.some(r => r.menuName.toLowerCase() === newName.toLowerCase())) {
+                                    counter++;
+                                    newName = `Salinan - ${recipe.menuName} (${counter})`;
+                                  }
+                                  const duplicatedRecipe = JSON.parse(JSON.stringify(recipe));
+                                  duplicatedRecipe.id = Date.now();
+                                  duplicatedRecipe.menuName = newName;
+                                  setEditingRecipeData(duplicatedRecipe);
+                                  setIsCreatingNewRecipe(true);
+                                }} className="bg-purple-50 hover:bg-purple-100 text-purple-600 border border-purple-200 p-2 rounded-lg transition-colors font-bold flex items-center gap-2 px-3">
+                                  <i className="fas fa-copy"></i> <span className="hidden sm:inline">Duplikat</span>
+                                </button>
+                              )}
+                              {!isCreatingNewRecipe && (
                                 <button onClick={() => { 
                                   setConfirmDialog({
                                     title: 'Hapus Menu',
@@ -2223,6 +2240,16 @@
                                 Batal
                               </button>
                               <button onClick={() => {
+                                const nameInput = document.getElementById('modal-menu-name-input');
+                                const currentName = nameInput ? nameInput.value : recipe.menuName;
+                                
+                                const isDuplicateName = recipes.some(r => r.id !== recipe.id && r.menuName.toLowerCase() === currentName.trim().toLowerCase());
+                                if (isDuplicateName) {
+                                  alert('Maaf, nama resep ini sudah digunakan! Silakan ganti dengan nama lain agar tidak duplikat.');
+                                  if (nameInput) nameInput.focus();
+                                  return;
+                                }
+
                                 setConfirmDialog({
                                   title: 'Simpan Resep',
                                   message: 'Apakah Anda yakin ingin menyimpan perubahan pada resep ini?',
