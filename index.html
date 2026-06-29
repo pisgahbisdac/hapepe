@@ -151,6 +151,16 @@
       return str;
     };
 
+    const formatDateLocal = (dateStringOrObject) => {
+      if (!dateStringOrObject) return '';
+      const d = new Date(dateStringOrObject);
+      if (isNaN(d.getTime())) return dateStringOrObject;
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
     const parseNumberInput = (value) => {
       return parseFloat(String(value).replace(/\./g, '').replace(',', '.')) || 0;
     };
@@ -223,6 +233,13 @@
 
     function App() {
       const [activeTab, setActiveTab] = useState('recipes');
+      const handleTabChange = (tab) => {
+        if (React.startTransition) {
+          React.startTransition(() => setActiveTab(tab));
+        } else {
+          setActiveTab(tab);
+        }
+      };
       const [isLoading, setIsLoading] = useState(false);
 
       const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -245,6 +262,7 @@
       const [sales, setSales] = useState([]);
       const [adjustments, setAdjustments] = useState([]);
       const [customConversions, setCustomConversions] = useState([]);
+      const [butcherItems, setButcherItems] = useState([]);
 
       const [showConversionModal, setShowConversionModal] = useState(false);
       const [editingConversionItem, setEditingConversionItem] = useState(null);
@@ -279,6 +297,8 @@
       const [isCreatingNewRecipe, setIsCreatingNewRecipe] = useState(false);
       const [newIngredient, setNewIngredient] = useState({ itemName: '', quantity: '' });
 
+      const [newButcherItem, setNewButcherItem] = useState({ itemName: '', netWeight: '' });
+      const [editingButcherItem, setEditingButcherItem] = useState(null);
 
       // ==========================================
       // INTEGRASI KE GOOGLE APPS SCRIPT
@@ -322,6 +342,7 @@
               if (res.data.sales) setSales(res.data.sales);
               if (res.data.adjustments) setAdjustments(res.data.adjustments);
               if (res.data.conversions) setCustomConversions(res.data.conversions);
+              if (res.data.butcherItems) setButcherItems(res.data.butcherItems);
               if (res.data.users) setUsersList(res.data.users);
               if (res.data.auditLogs) setAuditLogs(res.data.auditLogs);
               
@@ -390,6 +411,7 @@
                   setSales(res.data.sales || []);
                   setAdjustments(res.data.adjustments || []);
                   setCustomConversions(res.data.conversions || []);
+                  if (res.data.butcherItems) setButcherItems(res.data.butcherItems);
                   if (res.data.users) setUsersList(res.data.users);
                 }
               })
@@ -418,6 +440,7 @@
             setAdjustments([]);
             setOverheadCosts([]);
             setCustomConversions([]);
+            setButcherItems([]);
             setActiveTab('recipes');
             if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
           }
@@ -1403,6 +1426,66 @@
         });
       };
 
+      const handleAddButcherItem = (e) => {
+        e.preventDefault();
+        if (!newButcherItem.itemName || !newButcherItem.netWeight) return;
+        const bData = { id: Date.now(), itemName: newButcherItem.itemName, netWeight: newButcherItem.netWeight, imageUrl: '' };
+        setButcherItems([...butcherItems, bData]);
+        sendApiRequest('addButcherItem', bData);
+        setNewButcherItem({ itemName: '', netWeight: '' });
+      };
+
+      const handleSaveButcherItem = (id) => {
+        if (!editingButcherItem) return;
+        setButcherItems(butcherItems.map(b => b.id === id ? editingButcherItem : b));
+        sendApiRequest('editButcherItem', editingButcherItem);
+        setEditingButcherItem(null);
+      };
+
+      const handleDeleteButcherItem = (id) => {
+        setConfirmDialog({
+          title: 'Hapus Item Butcher',
+          message: 'Hapus data item butcher ini?',
+          type: 'danger',
+          confirmText: 'Hapus',
+          onConfirm: () => {
+            setButcherItems(butcherItems.filter(b => b.id !== id));
+            sendApiRequest('deleteButcherItem', { id });
+          }
+        });
+      };
+
+      const handleButcherImageUpload = (id, file) => {
+        if (!file) return;
+        setIsUploadingImage(true);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const maxSize = 800;
+            if (width > height && width > maxSize) { height *= maxSize / width; width = maxSize; } 
+            else if (height > maxSize) { width *= maxSize / height; height = maxSize; }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+            
+            const updatedItems = butcherItems.map(b => b.id === id ? { ...b, imageUrl: compressedBase64 } : b);
+            setButcherItems(updatedItems);
+            const targetItem = updatedItems.find(b => b.id === id);
+            if (targetItem) sendApiRequest('editButcherItem', targetItem);
+            
+            setIsUploadingImage(false);
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      };
+
       // ==========================================
       // DRAG AND DROP INGREDIENTS
       // ==========================================
@@ -1653,45 +1736,50 @@
             </header>
 
             {/* Tab Navigation */}
-            <div className="flex space-x-2 bg-white p-2 rounded-xl shadow-sm border border-slate-200 overflow-x-auto print-hide">
+            <div className="flex space-x-2 bg-white p-2 rounded-xl shadow-sm border border-slate-200 overflow-x-auto print-hide mb-6">
               {(userRole === 'admin' || userPermissions.includes('purchases')) && (
-                <button onClick={() => setActiveTab('purchases')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'purchases' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-                  <i className="fas fa-shopping-cart"></i> 1. Data Bahan Baku
+                <button onClick={() => handleTabChange('purchases')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'purchases' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+                  <i className="fas fa-box"></i> <span className="hidden lg:inline">Data Bahan Baku</span>
                 </button>
               )}
               {(userRole === 'admin' || userPermissions.includes('overhead')) && (
-                <button onClick={() => setActiveTab('overhead')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'overhead' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-                  <i className="fas fa-file-invoice-dollar"></i> 2. Biaya Operasional
+                <button onClick={() => handleTabChange('overhead')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'overhead' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+                  <i className="fas fa-file-invoice-dollar"></i> <span className="hidden lg:inline">Biaya Operasional</span>
                 </button>
               )}
               {(userRole === 'admin' || userPermissions.includes('recipes')) && (
-                <button onClick={() => setActiveTab('recipes')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'recipes' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
-                  <i className="fas fa-utensils"></i> 3. Costing & Harga Jual
+                <button onClick={() => handleTabChange('recipes')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'recipes' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
+                  <i className="fas fa-utensils"></i> <span className="hidden lg:inline">Costing & Harga Jual</span>
                 </button>
               )}
               {(userRole === 'admin' || userPermissions.includes('simulasi')) && (
-                <button onClick={() => setActiveTab('simulasi')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'simulasi' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
-                  <i className="fas fa-chart-pie"></i> 4. Simulasi Bisnis
+                <button onClick={() => handleTabChange('simulasi')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'simulasi' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
+                  <i className="fas fa-chart-line text-lg"></i> <span className="hidden lg:inline">Simulasi Bisnis</span>
                 </button>
               )}
               {(userRole === 'admin' || userPermissions.includes('katalog')) && (
-                <button onClick={() => setActiveTab('katalog')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'katalog' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
-                  <i className="fas fa-search"></i> 5. Katalog Menu
+                <button onClick={() => handleTabChange('katalog')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'katalog' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-500 hover:bg-emerald-50 hover:text-emerald-600'}`}>
+                  <i className="fas fa-book-open text-lg"></i> <span className="hidden lg:inline">Katalog Menu</span>
                 </button>
               )}
               {(userRole === 'admin' || userPermissions.includes('inventory')) && (
-                <button onClick={() => setActiveTab('inventory')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'inventory' ? 'bg-orange-600 text-white shadow-md' : 'text-slate-500 hover:bg-orange-50 hover:text-orange-600'}`}>
-                  <i className="fas fa-boxes"></i> 6. Inventory & Stok
+                <button onClick={() => handleTabChange('inventory')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'inventory' ? 'bg-orange-600 text-white shadow-md' : 'text-slate-500 hover:bg-orange-50 hover:text-orange-600'}`}>
+                  <i className="fas fa-warehouse text-lg"></i> <span className="hidden lg:inline">Laporan Inventory</span>
                 </button>
               )}
               {userRole === 'admin' && (
-                <button onClick={() => setActiveTab('users')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-blue-50 hover:text-blue-600'}`}>
-                  <i className="fas fa-users-cog"></i> 7. Pengaturan Akun
+                <button onClick={() => handleTabChange('users')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-blue-50 hover:text-blue-600'}`}>
+                  <i className="fas fa-users text-lg"></i> <span className="hidden lg:inline">Kelola Staff</span>
                 </button>
               )}
               {userRole === 'admin' && (
-                <button onClick={() => setActiveTab('audit')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'audit' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-purple-50 hover:text-purple-600'}`}>
-                  <i className="fas fa-history"></i> 8. Riwayat Aktivitas
+                <button onClick={() => handleTabChange('audit')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'audit' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-500 hover:bg-purple-50 hover:text-purple-600'}`}>
+                  <i className="fas fa-history text-lg"></i> <span className="hidden lg:inline">Riwayat Aktivitas</span>
+                </button>
+              )}
+              {(userRole === 'admin' || userPermissions.includes('butcher')) && (
+                <button onClick={() => handleTabChange('butcher')} className={`flex-1 flex justify-center items-center gap-2 py-3 px-4 rounded-lg font-bold transition-all whitespace-nowrap ${activeTab === 'butcher' ? 'bg-red-600 text-white shadow-md' : 'text-slate-500 hover:bg-red-50 hover:text-red-600'}`}>
+                  <i className="fas fa-drumstick-bite text-lg"></i> <span className="hidden lg:inline">Menu Butcher</span>
                 </button>
               )}
             </div>
@@ -2716,7 +2804,8 @@
 
                   recipes.filter(r => r.recipeType !== 'sub').forEach(recipe => {
                     const hppBahan = recipeStatsMap.get(recipe.id)?.hpp || 0;
-                    const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
+                    const margin = Number(recipe.targetMarginPercent) || 0;
+                    const hargaJualIdeal = margin === 100 ? 0 : hppBahan / (1 - (margin / 100));
 
                     const qtyTerjual = salesSimulation[recipe.id] || 0;
                     if (qtyTerjual > 0) {
@@ -2805,7 +2894,8 @@
                       <tbody className="divide-y divide-slate-100 block md:table-row-group">
                         {recipes.filter(r => r.recipeType !== 'sub').filter(r => r.menuName.toLowerCase().includes(searchSimulasi.toLowerCase())).map(recipe => {
                           const hppBahan = recipeStatsMap.get(recipe.id)?.hpp || 0;
-                          const hargaJualIdeal = hppBahan / (1 - (recipe.targetMarginPercent / 100));
+                          const margin = Number(recipe.targetMarginPercent) || 0;
+                          const hargaJualIdeal = margin === 100 ? 0 : hppBahan / (1 - (margin / 100));
                           const profitPerPorsi = hargaJualIdeal - hppBahan;
 
                           return (
@@ -3290,11 +3380,8 @@
                     )}
                   </div>
                 </div>
-
               </div>
             )}
-          </div>
-
           {/* Modal Rincian Harga Rata-rata */}
           {selectedPriceDetailItem && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4 z-50 print-hide animate-fade-in">
@@ -3450,8 +3537,6 @@
               </div>
             </div>
           )}
-          <br />
-
           {/* TAB 7: PENGATURAN AKUN (USERS) */}
           {activeTab === 'users' && userRole === 'admin' && (
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 animate-fade-in">
@@ -3588,6 +3673,96 @@
             </div>
           )}
 
+          {/* TAB 9: BUTCHER */}
+          {activeTab === 'butcher' && (userRole === 'admin' || userPermissions.includes('butcher')) && (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in">
+              <div className="p-6 border-b border-slate-100 bg-red-50 flex justify-between items-center">
+                <h2 className="text-xl font-bold text-red-800"><i className="fas fa-drumstick-bite mr-2"></i> Pengaturan Menu Butcher</h2>
+              </div>
+              <div className="p-6">
+                <form onSubmit={handleAddButcherItem} className="flex flex-col md:flex-row gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <input type="text" placeholder="Bahan Butcher (contoh: Daging Sapi Slice)" className="flex-1 p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-red-500 font-medium" value={newButcherItem.itemName} onChange={e => setNewButcherItem({ ...newButcherItem, itemName: e.target.value })} required />
+                  <input type="text" placeholder="Berat Bersih (contoh: 500g)" className="w-full md:w-1/3 p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-red-500 font-medium" value={newButcherItem.netWeight} onChange={e => setNewButcherItem({ ...newButcherItem, netWeight: e.target.value })} required />
+                  <button type="submit" className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md shadow-red-500/20 whitespace-nowrap">
+                    <i className="fas fa-plus mr-2"></i> Tambah
+                  </button>
+                </form>
+
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 uppercase text-xs">
+                        <th className="p-4 font-bold rounded-tl-xl w-32">Gambar</th>
+                        <th className="p-4 font-bold">Nama Bahan</th>
+                        <th className="p-4 font-bold">Berat Bersih / Pack</th>
+                        <th className="p-4 font-bold text-center rounded-tr-xl w-24">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {butcherItems.map(item => {
+                        const isEditing = editingButcherItem && editingButcherItem.id === item.id;
+                        return (
+                          <tr key={item.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-3 text-center">
+                              <div className="relative w-16 h-16 bg-slate-100 rounded-lg overflow-hidden border border-slate-200 mx-auto group">
+                                {item.imageUrl ? (
+                                  <img src={item.imageUrl} alt={item.itemName} className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                    <i className="fas fa-image text-xl"></i>
+                                  </div>
+                                )}
+                                <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer text-white">
+                                  <i className="fas fa-camera"></i>
+                                  <input type="file" accept="image/jpeg, image/png" className="hidden" onChange={(e) => handleButcherImageUpload(item.id, e.target.files[0])} />
+                                </label>
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              {isEditing ? (
+                                <input type="text" className="w-full p-2 border border-slate-200 rounded-lg font-medium" value={editingButcherItem.itemName} onChange={e => setEditingButcherItem({ ...editingButcherItem, itemName: e.target.value })} />
+                              ) : (
+                                <span className="font-bold text-slate-800 text-base">{item.itemName}</span>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              {isEditing ? (
+                                <input type="text" className="w-full p-2 border border-slate-200 rounded-lg font-medium" value={editingButcherItem.netWeight} onChange={e => setEditingButcherItem({ ...editingButcherItem, netWeight: e.target.value })} />
+                              ) : (
+                                <span className="text-slate-600 bg-slate-100 px-3 py-1 rounded-full text-xs font-bold">{item.netWeight}</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-center">
+                              {isEditing ? (
+                                <button onClick={() => handleSaveButcherItem(item.id)} className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 transition-colors">
+                                  <i className="fas fa-check"></i>
+                                </button>
+                              ) : (
+                                <div className="flex justify-center gap-2">
+                                  <button onClick={() => setEditingButcherItem(item)} className="w-8 h-8 rounded-full bg-blue-50 text-blue-500 hover:bg-blue-100 transition-colors" title="Edit">
+                                    <i className="fas fa-pen text-xs"></i>
+                                  </button>
+                                  <button onClick={() => handleDeleteButcherItem(item.id)} className="w-8 h-8 rounded-full bg-rose-50 text-rose-500 hover:bg-rose-100 transition-colors" title="Hapus">
+                                    <i className="fas fa-trash text-xs"></i>
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {butcherItems.length === 0 && (
+                        <tr>
+                          <td colSpan="4" className="text-center p-8 text-slate-500">Belum ada item butcher. Silakan tambahkan item baru.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Modal Tambah/Edit User */}
           {showUserModal && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4 z-50 animate-fade-in">
@@ -3634,7 +3809,8 @@
                             { id: 'katalog', label: '5. Katalog Menu' },
                             { id: 'inventory', label: '6. Akses Laporan Inventory' },
                             { id: 'inv_sales', label: '↳ Boleh Input Penjualan' },
-                            { id: 'inv_adjustments', label: '↳ Boleh Input Penyesuaian Manual' }
+                            { id: 'inv_adjustments', label: '↳ Boleh Input Penyesuaian Manual' },
+                            { id: 'butcher', label: '7. Menu Butcher' }
                           ].map(menu => (
                             <label key={menu.id} className="flex items-center gap-2.5 cursor-pointer hover:bg-slate-100 p-2 rounded-lg transition-colors border border-transparent hover:border-slate-200">
                               <input 
@@ -3669,7 +3845,7 @@
               </div>
             </div>
           )}
-
+          </div>
         </div>
       );
     }

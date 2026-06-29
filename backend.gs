@@ -24,6 +24,7 @@ const SHEET_ADJUSTMENTS = 'Adjustments';
 const SHEET_CONVERSIONS = 'Conversions';
 const SHEET_USERS = 'Users';
 const SHEET_AUDIT = 'AuditTrail';
+const SHEET_BUTCHER = 'Butcher';
 /**
  * Run this function ONCE to set up the spreadsheet automatically.
  */
@@ -61,6 +62,14 @@ function setup() {
     recipesSheet = ss.insertSheet(SHEET_RECIPES);
     recipesSheet.appendRow(['ID', 'MenuName', 'TargetMarginPercent', 'ImageUrl', 'YieldQty', 'YieldUnit', 'YieldType', 'Bahan 1', 'Qty 1', 'Satuan 1']);
     recipesSheet.getRange("A1:J1").setFontWeight("bold");
+  }
+
+  // Create Butcher sheet
+  let butcherSheet = ss.getSheetByName(SHEET_BUTCHER);
+  if (!butcherSheet) {
+    butcherSheet = ss.insertSheet(SHEET_BUTCHER);
+    butcherSheet.appendRow(['ID', 'ItemName', 'NetWeight', 'ImageURL']);
+    butcherSheet.getRange("A1:D1").setFontWeight("bold");
   }
 
   // Create Sales sheet
@@ -271,6 +280,17 @@ function doGet(e) {
       }));
     }
 
+    const butcherSheet = ss.getSheetByName(SHEET_BUTCHER);
+    let butcherItems = [];
+    if (butcherSheet) {
+      butcherItems = readSheetData(butcherSheet).map(row => ({
+        id: row.ID,
+        itemName: row.ItemName,
+        netWeight: row.NetWeight,
+        imageUrl: row.ImageURL || ''
+      }));
+    }
+
     const response = {
       status: 'success',
       data: {
@@ -290,7 +310,8 @@ function doGet(e) {
           quantity: Number(row.Quantity),
           reason: row.Reason
         })),
-        conversions: conversions
+        conversions: conversions,
+        butcherItems: butcherItems
       }
     };
     
@@ -471,6 +492,20 @@ function doPost(e) {
       });
     }
 
+    if (payload.action === 'getPublicButcher') {
+      let butcherItems = [];
+      const butcherSheet = ss.getSheetByName(SHEET_BUTCHER);
+      if (butcherSheet) {
+        butcherItems = readSheetData(butcherSheet).map(row => ({
+          id: row.ID,
+          itemName: row.ItemName,
+          netWeight: row.NetWeight,
+          imageUrl: row.ImageURL || ''
+        }));
+      }
+      return createJsonResponse({ status: 'success', data: butcherItems });
+    }
+
     // Auth Check
     const username = payload.username;
     const password = payload.password;
@@ -594,13 +629,34 @@ function doPost(e) {
         logAudit(ss, username, 'Edit Pengguna', `Mengubah akun pengguna: ${data.username}`);
         break;
       case 'deleteUser':
-        if (authResult.role !== 'admin') throw new Error("Unauthorized");
+        if (authResult.role !== 'admin') throw new Error("Akses ditolak");
         result = deleteRowById(SHEET_USERS, data.id);
-        logAudit(ss, username, 'Hapus Pengguna', `Menghapus akun pengguna (ID: ${data.id})`);
+        logAudit(ss, username, 'Hapus User', `Menghapus ID pengguna: ${data.id}`);
+        break;
+        
+      case 'addButcherItem':
+        if (authResult.role !== 'admin') throw new Error("Akses ditolak");
+        const bSheet = ss.getSheetByName(SHEET_BUTCHER);
+        if (!bSheet) throw new Error("Sheet Butcher tidak ditemukan");
+        bSheet.appendRow([data.id, data.itemName, data.netWeight, data.imageUrl || '']);
+        result = { message: "Item butcher ditambahkan" };
+        logAudit(ss, username, 'Tambah Butcher', `Menambah item butcher: ${data.itemName} (${data.netWeight})`);
+        break;
+
+      case 'editButcherItem':
+        if (authResult.role !== 'admin') throw new Error("Akses ditolak");
+        result = editRowById(SHEET_BUTCHER, data.id, [data.id, data.itemName, data.netWeight, data.imageUrl || '']);
+        logAudit(ss, username, 'Edit Butcher', `Mengubah item butcher: ${data.itemName}`);
+        break;
+
+      case 'deleteButcherItem':
+        if (authResult.role !== 'admin') throw new Error("Akses ditolak");
+        result = deleteRowById(SHEET_BUTCHER, data.id);
+        logAudit(ss, username, 'Hapus Butcher', `Menghapus item butcher ID: ${data.id}`);
         break;
 
       default:
-        throw new Error("Invalid action provided");
+        throw new Error("Action not found");
     }
 
     return createJsonResponse({ status: 'success', result: result });
