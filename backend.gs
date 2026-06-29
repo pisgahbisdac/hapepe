@@ -579,6 +579,10 @@ function doPost(e) {
         result = updateRecipeRow(data);
         logAudit(ss, username, 'Edit Resep', `Mengubah resep: ${data.menuName || data.id}`);
         break;
+      case 'updateMultipleRecipes':
+        result = updateMultipleRecipes(data.recipes);
+        logAudit(ss, username, 'Impor Massal Resep', `Melakukan pembaruan/impor massal pada ${data.recipes.length} resep.`);
+        break;
         
       // --- SALES ---
       case 'addSale':
@@ -898,4 +902,39 @@ function updateRecipeRow(recipeData) {
     }
   }
   throw new Error("Recipe ID not found for update");
+}
+
+function updateMultipleRecipes(recipesList) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_RECIPES);
+  const data = sheet.getDataRange().getValues();
+  
+  let maxColsNeeded = 0;
+  const existingRowMap = new Map();
+  for (let i = 1; i < data.length; i++) {
+    existingRowMap.set(String(data[i][0]), i + 1);
+  }
+  
+  const lastRow = sheet.getLastRow();
+  let nextNewRow = lastRow + 1;
+  const lastCol = sheet.getLastColumn();
+  
+  for (const recipe of recipesList) {
+    const newRowData = addRecipeRowData(recipe);
+    maxColsNeeded = Math.max(maxColsNeeded, newRowData.length);
+    
+    if (existingRowMap.has(String(recipe.id))) {
+      const rowNum = existingRowMap.get(String(recipe.id));
+      if (lastCol > 0) {
+        sheet.getRange(rowNum, 1, 1, lastCol).clearContent();
+      }
+      sheet.getRange(rowNum, 1, 1, newRowData.length).setValues([newRowData]);
+    } else {
+      sheet.getRange(nextNewRow, 1, 1, newRowData.length).setValues([newRowData]);
+      nextNewRow++;
+    }
+  }
+  
+  ensureRecipeHeaders(ss, Math.floor((maxColsNeeded - 7) / 3));
+  return { message: "Multiple recipes updated successfully" };
 }
