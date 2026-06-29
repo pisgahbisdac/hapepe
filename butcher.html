@@ -65,8 +65,27 @@
     function App() {
       const [items, setItems] = useState([]);
       const [isLoading, setIsLoading] = useState(true);
+      const autoRefreshRef = React.useRef(null);
       const [isDarkMode, setIsDarkMode] = useState(false);
       const [searchQuery, setSearchQuery] = useState('');
+
+      const fetchItems = (isAutoRefresh = false) => {
+        if (!isAutoRefresh) setIsLoading(true);
+        fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'getPublicButcher' })
+        })
+        .then(res => res.json())
+        .then(res => {
+          if (res.status === 'success') {
+            setItems(res.data || []);
+          }
+        })
+        .catch(err => console.error(err))
+        .finally(() => {
+          if (!isAutoRefresh) setIsLoading(false);
+        });
+      };
 
       useEffect(() => {
         // Load preference
@@ -79,19 +98,15 @@
           document.documentElement.classList.remove('dark');
         }
 
-        // Fetch data
-        fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'getPublicButcher' })
-        })
-        .then(res => res.json())
-        .then(res => {
-          if (res.status === 'success') {
-            setItems(res.data || []);
-          }
-        })
-        .catch(err => console.error(err))
-        .finally(() => setIsLoading(false));
+        // Fetch data initially
+        fetchItems();
+        
+        // Auto refresh every 60 seconds (1 minute)
+        autoRefreshRef.current = setInterval(() => {
+          fetchItems(true);
+        }, 60000);
+        
+        return () => clearInterval(autoRefreshRef.current);
       }, []);
 
       const toggleTheme = () => {
