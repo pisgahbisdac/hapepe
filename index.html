@@ -287,6 +287,7 @@
       const [isUploadingImage, setIsUploadingImage] = useState(false);
       const [inventorySearch, setInventorySearch] = useState('');
       const [selectedPriceDetailItem, setSelectedPriceDetailItem] = useState(null);
+      const [selectedInventoryHistory, setSelectedInventoryHistory] = useState(null);
 
       const [newOverhead, setNewOverhead] = useState({ name: '', amount: '' });
       const [newPurchase, setNewPurchase] = useState({ date: formatDateLocal(new Date()), itemName: '', unit: 'kg', quantity: '', totalPrice: '' });
@@ -605,9 +606,13 @@
               name: rawName,
               unit: uItem ? uItem.unit : '',
               stokAwal: 0,
+              stokAwalHistory: [],
               masuk: 0,
+              masukHistory: [],
               keluarSales: 0,
-              keluarAdjustments: 0
+              keluarSalesHistory: [],
+              keluarAdjustments: 0,
+              keluarAdjustmentsHistory: []
             });
           }
           return stockMap.get(name);
@@ -642,8 +647,14 @@
 
           const item = ensureItem(name, p.itemName);
           const qty = Number(p.quantity) || 0;
-          if (bucket === 'awal') item.stokAwal += qty;
-          else item.masuk += qty;
+          const historyEntry = { date: p.date, type: 'Pembelian', qty, details: p.vendor || '-', price: Number(p.totalPrice) || 0 };
+          if (bucket === 'awal') {
+            item.stokAwal += qty;
+            item.stokAwalHistory.push({ ...historyEntry, type: 'Stok Awal (Pembelian Sebelum Filter)' });
+          } else {
+            item.masuk += qty;
+            item.masukHistory.push(historyEntry);
+          }
         });
 
         // 2. Total Out from Sales
@@ -677,8 +688,14 @@
                   deductIngredients(subRecipe, subMultiplier, bucketStr, new Set(visited));
                 } else {
                   const item = ensureItem(nameStr, ing.itemName);
-                  if (bucketStr === 'awal') item.stokAwal -= qtyUsed;
-                  else item.keluarSales += qtyUsed;
+                  const historyEntry = { date: sale.date, type: 'Keluar Resep', qty: qtyUsed, details: `${sale.menuName || recipe.menuName} (${qtySold} porsi)` };
+                  if (bucketStr === 'awal') {
+                    item.stokAwal -= qtyUsed;
+                    item.stokAwalHistory.push({ ...historyEntry, type: 'Keluar Resep (Sebelum Filter)', qty: -qtyUsed });
+                  } else {
+                    item.keluarSales += qtyUsed;
+                    item.keluarSalesHistory.push(historyEntry);
+                  }
                 }
               });
             };
@@ -695,9 +712,15 @@
           const name = String(adj.itemName || '').toLowerCase();
           const qtyAdj = Number(adj.quantity) || 0;
           const item = ensureItem(name, adj.itemName);
+          const historyEntry = { date: adj.date, type: 'Buang / Penyesuaian', qty: qtyAdj, details: adj.note || '-' };
 
-          if (bucket === 'awal') item.stokAwal -= qtyAdj;
-          else item.keluarAdjustments += qtyAdj;
+          if (bucket === 'awal') {
+            item.stokAwal -= qtyAdj;
+            item.stokAwalHistory.push({ ...historyEntry, type: 'Buang/Rusak (Sebelum Filter)', qty: -qtyAdj });
+          } else {
+            item.keluarAdjustments += qtyAdj;
+            item.keluarAdjustmentsHistory.push(historyEntry);
+          }
         });
 
         return Array.from(stockMap.values())
@@ -3518,10 +3541,18 @@
                               Rp {formatNum(Math.round(item.price))}
                               <i className="fas fa-info-circle ml-2 text-emerald-400 text-[10px]"></i>
                             </td>
-                            <td className="p-3 text-center text-slate-600 font-medium">{formatNum(item.stokAwal)}</td>
-                            <td className="p-3 text-center text-blue-600 font-medium">{formatNum(item.masuk)}</td>
-                            <td className="p-3 text-center text-emerald-600 font-medium">{formatNum(item.keluarSales)}</td>
-                            <td className="p-3 text-center text-orange-600 font-medium">{formatNum(item.keluarAdjustments)}</td>
+                            <td className="p-3 text-center text-slate-600 font-medium cursor-pointer hover:underline hover:text-blue-600 transition-colors" onClick={() => setSelectedInventoryHistory({ item, type: 'Stok Awal', history: item.stokAwalHistory })}>
+                              {formatNum(item.stokAwal)}
+                            </td>
+                            <td className="p-3 text-center text-blue-600 font-medium cursor-pointer hover:underline hover:text-blue-800 transition-colors" onClick={() => setSelectedInventoryHistory({ item, type: 'Masuk (Beli)', history: item.masukHistory })}>
+                              {formatNum(item.masuk)}
+                            </td>
+                            <td className="p-3 text-center text-emerald-600 font-medium cursor-pointer hover:underline hover:text-emerald-800 transition-colors" onClick={() => setSelectedInventoryHistory({ item, type: 'Keluar (Resep)', history: item.keluarSalesHistory })}>
+                              {formatNum(item.keluarSales)}
+                            </td>
+                            <td className="p-3 text-center text-orange-600 font-medium cursor-pointer hover:underline hover:text-orange-800 transition-colors" onClick={() => setSelectedInventoryHistory({ item, type: 'Keluar (Buang)', history: item.keluarAdjustmentsHistory })}>
+                              {formatNum(item.keluarAdjustments)}
+                            </td>
                             <td className={`p-3 text-center font-black ${item.stokAkhir < 0 ? 'text-red-500 bg-red-50' : 'text-slate-800 bg-emerald-50/30'}`}>{formatNum(item.stokAkhir)}</td>
                             {(() => {
                               const u = (item.unit || '').toLowerCase();
@@ -3585,6 +3616,69 @@
                 </div>
               </div>
             )}
+          {/* MODAL INVENTORY HISTORY */}
+          {selectedInventoryHistory && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4 z-50 print-hide animate-fade-in">
+              <div className="bg-white rounded-2xl shadow-2xl overflow-hidden animate-zoom-in flex flex-col m-4 w-full max-w-3xl max-h-[90vh]">
+                <div className="bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center shrink-0">
+                  <h3 className="font-bold text-white text-lg flex items-center gap-2">
+                    <i className="fas fa-list-alt text-slate-400"></i> Rincian {selectedInventoryHistory.type}: {selectedInventoryHistory.item.name}
+                  </h3>
+                  <button onClick={() => setSelectedInventoryHistory(null)} className="text-slate-400 hover:text-white transition-colors">
+                    <i className="fas fa-times text-xl"></i>
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+                  {selectedInventoryHistory.history.length === 0 ? (
+                    <div className="text-center py-12 text-slate-500">
+                      <i className="fas fa-box-open text-4xl mb-4 text-slate-300"></i>
+                      <p>Tidak ada riwayat transaksi yang tercatat pada bagian ini.</p>
+                    </div>
+                  ) : (
+                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                      <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-100 border-b border-slate-200">
+                          <tr>
+                            <th className="py-3 px-4 font-bold text-slate-700">Tanggal</th>
+                            <th className="py-3 px-4 font-bold text-slate-700">Jenis</th>
+                            <th className="py-3 px-4 font-bold text-slate-700">Keterangan / Detail</th>
+                            {selectedInventoryHistory.history.some(h => h.price !== undefined) && (
+                              <th className="py-3 px-4 text-right font-bold text-slate-700">Biaya</th>
+                            )}
+                            <th className="py-3 px-4 text-right font-bold text-slate-700">Kuantitas</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {selectedInventoryHistory.history.map((h, i) => (
+                            <tr key={i} className="hover:bg-slate-50">
+                              <td className="py-3 px-4 whitespace-nowrap text-slate-600">{new Date(h.date).toLocaleDateString('id-ID')}</td>
+                              <td className="py-3 px-4 font-medium text-slate-700">{h.type}</td>
+                              <td className="py-3 px-4 text-slate-600">{h.details}</td>
+                              {h.price !== undefined && (
+                                <td className="py-3 px-4 text-right font-medium text-slate-700">
+                                  {h.price > 0 ? `Rp ${formatNum(h.price)}` : '-'}
+                                </td>
+                              )}
+                              <td className={`py-3 px-4 text-right font-bold ${h.qty < 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                                {formatNum(h.qty)} {selectedInventoryHistory.item.unit}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-bold">
+                          <tr>
+                            <td colSpan={selectedInventoryHistory.history.some(h => h.price !== undefined) ? 4 : 3} className="py-3 px-4 text-right text-slate-700">TOTAL AKUMULASI:</td>
+                            <td className="py-3 px-4 text-right text-emerald-700">{formatNum(selectedInventoryHistory.history.reduce((sum, h) => sum + h.qty, 0))} {selectedInventoryHistory.item.unit}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Modal Rincian Harga Rata-rata */}
           {selectedPriceDetailItem && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center p-4 z-50 print-hide animate-fade-in">
@@ -3755,6 +3849,8 @@
                   </form>
                 </div>
               </div>
+              
+
             </div>
           )}
           {/* TAB 7: PENGATURAN AKUN (USERS) */}
@@ -4013,6 +4109,9 @@
                     </tbody>
                   </table>
                 </div>
+
+
+
               </div>
             </div>
           )}
