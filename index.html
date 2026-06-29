@@ -248,6 +248,7 @@
       const [userRole, setUserRole] = useState('');
       const [userPermissions, setUserPermissions] = useState([]);
       const [usersList, setUsersList] = useState([]);
+      const [printMode, setPrintMode] = useState('normal'); // 'normal' | 'cook_recipe'
       const [auditLogs, setAuditLogs] = useState([]);
       const [searchAudit, setSearchAudit] = useState('');
       const [loginError, setLoginError] = useState('');
@@ -860,7 +861,7 @@
       // EXPORT HANDLERS
       // ==========================================
       const handleExportExcel = () => {
-        const headers = ['Nama Bahan', 'Satuan Dasar', 'Harga Rata-rata', 'Stok Awal', 'Masuk (Beli)', 'Keluar (Resep)', 'Keluar (Buang)', 'Stok Akhir', 'Konversi'];
+        const headers = ['Nama Bahan', 'Satuan Dasar', 'Harga Rata-rata', 'Stok Awal', 'Masuk (Beli)', 'Keluar (Resep)', 'Keluar (Buang)', 'Stok Akhir', 'Konversi', 'Nilai Inventaris'];
         const rows = inventoryData.map(item => {
           const u = (item.unit || '').toLowerCase();
           const customConv = customConversions.find(c => c.itemName === item.name);
@@ -889,7 +890,8 @@
             item.keluarSales,
             item.keluarAdjustments,
             item.stokAkhir,
-            convStr
+            convStr,
+            Math.round(Math.max(0, item.stokAkhir) * (item.price || 0))
           ];
         });
 
@@ -2116,7 +2118,7 @@
                       <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999 }} className="bg-slate-50 flex flex-col overflow-hidden w-full h-full print-area">
                         <div className="w-full h-full flex flex-col overflow-hidden">
                           {/* MODAL HEADER */}
-                          <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 shrink-0 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sticky top-0 z-10">
+                          <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 shrink-0 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sticky top-0 z-10 print-hide">
                             <div className="flex items-center gap-4 flex-1 w-full">
                               <div className="flex flex-col items-start gap-1 w-full">
                                 <input
@@ -2166,8 +2168,11 @@
                               <button onClick={() => handleExportCostingExcel(recipe)} className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 p-2 rounded-lg transition-colors font-bold flex items-center gap-2 px-3">
                                 <i className="fas fa-file-excel"></i> <span className="hidden sm:inline">Excel</span>
                               </button>
-                              <button onClick={() => window.print()} className="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 p-2 rounded-lg transition-colors font-bold flex items-center gap-2 px-3">
-                                <i className="fas fa-print"></i> <span className="hidden sm:inline">Cetak PDF</span>
+                              <button onClick={() => { setPrintMode('normal'); setTimeout(() => window.print(), 100); }} className="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 p-2 rounded-lg transition-colors font-bold flex items-center gap-2 px-3">
+                                <i className="fas fa-file-invoice-dollar"></i> <span className="hidden sm:inline">Costing (PDF)</span>
+                              </button>
+                              <button onClick={() => { setPrintMode('cook_recipe'); setTimeout(() => { window.print(); setTimeout(() => setPrintMode('normal'), 500); }, 100); }} className="bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200 p-2 rounded-lg transition-colors font-bold flex items-center gap-2 px-3">
+                                <i className="fas fa-utensils"></i> <span className="hidden sm:inline">Resep Dapur (PDF)</span>
                               </button>
                               {!isCreatingNewRecipe && (
                                 <button onClick={() => { 
@@ -2226,7 +2231,7 @@
                           </div>
 
                           {/* MODAL BODY */}
-                          <div className="flex-1 overflow-y-auto">
+                          <div className={`flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50 relative custom-scrollbar ${printMode === 'cook_recipe' ? 'print:hidden' : ''}`}>
                             <div className="grid grid-cols-1 xl:grid-cols-2 bg-white">
                               {/* Kiri: HPP */}
                               <div className="p-5 xl:border-r border-slate-200">
@@ -2244,8 +2249,8 @@
                                         <th className="px-2 py-2 text-right">Berat Kotor (Costing)</th>
                                         {showKitchenConfig && <th className="px-2 py-2 text-right bg-emerald-50/50">Berat Bersih</th>}
                                         {showKitchenConfig && <th className="px-2 py-2 text-left bg-emerald-50/50">Takaran Manual</th>}
-                                        <th className="px-2 py-2 text-right print-hide">Total HPP</th>
-                                        <th className="px-2 py-2"></th>
+                                        <th className="px-2 py-2 text-right">Total HPP</th>
+                                        <th className="px-2 py-2 print-hide"></th>
                                       </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
@@ -2409,7 +2414,7 @@
                                                       </div>
                                                     </td>
                                                   )}
-                                                  <td className="py-2 text-right font-bold text-slate-700 px-2 print-hide">{formatRp(priceData.price * parseNumberInput(ing.quantity))}</td>
+                                                  <td className="py-2 text-right font-bold text-slate-700 px-2">{formatRp(priceData.price * parseNumberInput(ing.quantity))}</td>
                                                   <td className="py-2 text-right px-2 print-hide">
                                                     <button onClick={() => handleDeleteIngredient(recipe.id, ing.id)} className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-2">
                                                       <i className="fas fa-trash-alt"></i>
@@ -2786,6 +2791,130 @@
                             </div>
 
                           </div>
+                          
+                          {/* COOK RECIPE PDF LAYOUT */}
+                          {printMode === 'cook_recipe' && (
+                            <div className="hidden print:block w-full bg-white text-black p-8 font-sans absolute top-0 left-0 min-h-full z-50">
+                              <h1 className="text-4xl font-black text-center mb-6">{recipe.menuName}</h1>
+                              
+                              <div className="grid grid-cols-3 border-2 border-black mb-4 text-center font-bold text-sm">
+                                 <div className="border-r-2 border-black py-2">
+                                   <div className="uppercase">Prep Time:</div>
+                                   <div className="font-normal">{recipe.instructions?.prepTime || '-'}</div>
+                                 </div>
+                                 <div className="border-r-2 border-black py-2">
+                                   <div className="uppercase">Cook Time:</div>
+                                   <div className="font-normal">{recipe.instructions?.cookTime || '-'}</div>
+                                 </div>
+                                 <div className="py-2">
+                                   <div className="uppercase">Servings:</div>
+                                   <div className="font-normal">{recipe.yieldQty} {recipe.yieldUnit}</div>
+                                 </div>
+                              </div>
+                              
+                              <div className="text-sm font-bold mb-6">
+                                Tools : <span className="font-normal">{recipe.instructions?.tools || '-'}</span>
+                              </div>
+                              
+                              <div className="font-bold text-sm mb-2">Ingredients</div>
+                              
+                              <div className="flex gap-6 mb-8">
+                                {recipe.imageUrl ? (
+                                  <div className="w-1/2">
+                                    <img src={recipe.imageUrl} alt={recipe.menuName} className="w-full h-auto object-cover border border-slate-200" />
+                                  </div>
+                                ) : null}
+                                <div className={recipe.imageUrl ? "w-1/2" : "w-full"}>
+                                  <table className="w-full text-xs border-collapse border-2 border-black">
+                                    <tbody>
+                                      {/* Group ingredients by category */}
+                                      {(() => {
+                                        const groups = {};
+                                        (recipe.ingredients || []).filter(i => i.id !== 'META_YIELD' && i.id !== 'META_INSTRUCTIONS').forEach(ing => {
+                                          const cat = (ing.category || 'OTHERS').toUpperCase();
+                                          if (!groups[cat]) groups[cat] = [];
+                                          groups[cat].push(ing);
+                                        });
+                                        
+                                        const order = ['MAIN INGREDIENTS', 'CONDIMENTS', 'SEASONING', 'HERBS', 'OTHERS'];
+                                        const sortedCats = Object.keys(groups).sort((a, b) => {
+                                          const idxA = order.indexOf(a);
+                                          const idxB = order.indexOf(b);
+                                          if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                                          if (idxA !== -1) return -1;
+                                          if (idxB !== -1) return 1;
+                                          return a.localeCompare(b);
+                                        });
+                                        
+                                        return sortedCats.map(cat => (
+                                          <React.Fragment key={cat}>
+                                            <tr>
+                                              <td colSpan="3" className="border-2 border-t-2 border-black bg-slate-100 font-bold text-center uppercase py-1">{cat}</td>
+                                            </tr>
+                                            {groups[cat].map((ing, i) => (
+                                              <tr key={i}>
+                                                <td className="border border-x-2 border-black p-1 pl-2">{ing.itemName}</td>
+                                                <td className="border border-x-2 border-black p-1 text-center w-24">{ing.quantity} {ing.unit}</td>
+                                                <td className="border border-x-2 border-black p-1 text-center w-24">{ing.measure || '-'}</td>
+                                              </tr>
+                                            ))}
+                                          </React.Fragment>
+                                        ));
+                                      })()}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                              
+                              <table className="w-full text-xs border-collapse border-2 border-black mb-4 break-inside-auto">
+                                <thead>
+                                  <tr className="bg-slate-100">
+                                    <th className="border-2 border-black p-1 w-12 text-center">Step</th>
+                                    <th className="border-2 border-black p-1">Process</th>
+                                    <th className="border-2 border-black p-1 w-20 text-center">Temp</th>
+                                    <th className="border-2 border-black p-1 w-20 text-center">Time</th>
+                                    <th className="border-2 border-black p-1 w-1/3 text-center">Notes</th>
+                                  </tr>
+                                </thead>
+                                {(() => {
+                                  let stepCounter = 1;
+                                  const phases = recipe.instructions?.phases || [];
+                                  if (phases.length === 0) {
+                                     return (
+                                       <tbody>
+                                         <tr>
+                                           <td colSpan="5" className="border-2 border-black p-4 text-center text-slate-500 italic">Belum ada langkah memasak.</td>
+                                         </tr>
+                                       </tbody>
+                                     );
+                                  }
+                                  return phases.map((phase, pIdx) => (
+                                    <tbody key={pIdx} className="break-inside-avoid">
+                                      <tr>
+                                        <td colSpan="5" className="border-2 border-t-2 border-black p-1 bg-slate-100 font-bold uppercase">{phase.phase}</td>
+                                      </tr>
+                                      {(phase.steps || []).map((step, sIdx) => (
+                                        <tr key={sIdx} className="break-inside-avoid">
+                                          <td className="border border-x-2 border-black p-1 text-center font-medium">{stepCounter++}</td>
+                                          <td className="border border-x-2 border-black p-1">{step.process}</td>
+                                          <td className="border border-x-2 border-black p-1 text-center">{step.temp || '-'}</td>
+                                          <td className="border border-x-2 border-black p-1 text-center">{step.time || '-'}</td>
+                                          <td className="border border-x-2 border-black p-1">{step.notes || '-'}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  ));
+                                })()}
+                              </table>
+                              
+                              {recipe.instructions?.chefNote && (
+                                <div className="text-xs font-bold mt-4">
+                                  Chef Note: <span className="font-normal">{recipe.instructions.chefNote}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                         </div>
                       </div>
                       , document.body);
@@ -3296,23 +3425,33 @@
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-250px)] min-h-[600px] rounded-lg border border-slate-200 shadow-inner">
-                    <table className="w-full text-sm whitespace-nowrap">
-                      <thead className="bg-slate-800 text-slate-200 sticky top-0 z-10 shadow-md">
-                        <tr>
-                          <th className="p-3 text-left rounded-l-lg">Nama Bahan</th>
-                          <th className="p-3 text-center">Satuan</th>
-                          <th className="p-3 text-center text-emerald-300">Harga (Rata-rata)</th>
-                          <th className="p-3 text-center bg-slate-700">Stok Awal</th>
-                          <th className="p-3 text-center text-blue-300">Masuk (Beli)</th>
-                          <th className="p-3 text-center text-emerald-300">Keluar (Resep)</th>
-                          <th className="p-3 text-center text-orange-300">Keluar (Buang)</th>
-                          <th className="p-3 text-center bg-emerald-900 font-black text-white">Stok Akhir</th>
-                          <th className="p-3 text-center rounded-r-lg bg-violet-900 font-black text-white">Konversi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {inventoryData.filter(item => item.name.toLowerCase().includes(inventorySearch.toLowerCase())).map((item, idx) => (
+                  <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-250px)] min-h-[600px] rounded-lg border border-slate-200 shadow-inner print:overflow-visible print:max-h-none print:min-h-0 print:border-none print:shadow-none">
+                    {(() => {
+                      const filteredInventory = inventoryData.filter(item => item.name.toLowerCase().includes(inventorySearch.toLowerCase()));
+                      const totalInventoryValue = filteredInventory.reduce((sum, item) => sum + (Math.max(0, item.stokAkhir) * (item.price || 0)), 0);
+                      
+                      return (
+                        <table className="w-full text-sm whitespace-nowrap print:whitespace-normal print:text-[11px]">
+                          <thead className="bg-slate-800 text-slate-200 sticky top-0 z-10 shadow-md print:static print:shadow-none">
+                            <tr>
+                              <th className="p-3 text-left rounded-l-lg">Nama Bahan</th>
+                              <th className="p-3 text-center">Satuan</th>
+                              <th className="p-3 text-center text-emerald-300">Harga (Rata-rata)</th>
+                              <th className="p-3 text-center bg-slate-700">Stok Awal</th>
+                              <th className="p-3 text-center text-blue-300">Masuk (Beli)</th>
+                              <th className="p-3 text-center text-emerald-300">Keluar (Resep)</th>
+                              <th className="p-3 text-center text-orange-300">Keluar (Buang)</th>
+                              <th className="p-3 text-center bg-emerald-900 font-black text-white">Stok Akhir</th>
+                              <th className="p-3 text-center bg-violet-900 font-black text-white">Konversi</th>
+                              <th className="p-3 text-right rounded-r-lg bg-teal-900 font-black text-white">Nilai Inventaris</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            <tr className="bg-slate-900 shadow-sm border-b border-slate-700">
+                              <td colSpan="9" className="p-3 text-right font-black text-slate-300 tracking-wider">TOTAL NILAI INVENTARIS:</td>
+                              <td className="p-3 text-right font-black text-teal-400 text-base">Rp {formatNum(Math.round(totalInventoryValue))}</td>
+                            </tr>
+                            {filteredInventory.map((item, idx) => (
                           <tr key={idx} className="hover:bg-slate-50 transition-colors">
                             <td className="p-3 font-semibold text-slate-800">{item.name}</td>
                             <td className="p-3 text-center text-slate-500 uppercase font-bold text-[10px] bg-slate-50">{item.unit}</td>
@@ -3353,7 +3492,7 @@
                                 <td className="p-3 text-center text-xs bg-violet-50/30 relative group">
                                   {displayVal !== null ? (
                                     <>
-                                      <span className={`font-bold ${isCustom ? 'text-pink-600' : 'text-violet-700'}`}>{formatNum(displayVal)}</span>{' '}
+                                      <span className={`font-bold ${isCustom ? 'text-pink-600' : 'text-violet-700'}`}>{formatNum(Number(displayVal.toFixed(1)))}</span>{' '}
                                       <span className={`uppercase font-black text-[9px] ${isCustom ? 'text-pink-400' : 'text-violet-400'}`}>{displayUnit}</span>
                                     </>
                                   ) : (
@@ -3370,10 +3509,19 @@
                                 </td>
                               );
                             })()}
+                                <td className="p-3 text-right font-black text-teal-700 bg-teal-50/30 border-l border-teal-100/50">
+                                  Rp {formatNum(Math.round(Math.max(0, item.stokAkhir) * (item.price || 0)))}
+                                </td>
                           </tr>
                         ))}
+                            <tr className="bg-slate-900 shadow-sm border-t border-slate-700">
+                              <td colSpan="9" className="p-3 text-right font-black text-slate-300 tracking-wider">TOTAL NILAI INVENTARIS:</td>
+                              <td className="p-3 text-right font-black text-teal-400 text-base">Rp {formatNum(Math.round(totalInventoryValue))}</td>
+                            </tr>
                       </tbody>
-                    </table>
+                        </table>
+                      );
+                    })()}
                     {inventoryData.length === 0 && <p className="text-center text-slate-400 p-8">Belum ada data stok yang bisa dihitung.</p>}
                     {inventoryData.length > 0 && inventoryData.filter(item => item.name.toLowerCase().includes(inventorySearch.toLowerCase())).length === 0 && (
                       <p className="text-center text-slate-400 p-8">Pencarian "{inventorySearch}" tidak ditemukan.</p>
