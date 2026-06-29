@@ -270,7 +270,7 @@
       const [selectedPriceDetailItem, setSelectedPriceDetailItem] = useState(null);
 
       const [newOverhead, setNewOverhead] = useState({ name: '', amount: '' });
-      const [newPurchase, setNewPurchase] = useState({ date: '2026-06-24', itemName: '', unit: 'kg', quantity: '', totalPrice: '' });
+      const [newPurchase, setNewPurchase] = useState({ date: formatDateLocal(new Date()), itemName: '', unit: 'kg', quantity: '', totalPrice: '' });
       const [newMenuName, setNewMenuName] = useState('');
       const [showKitchenConfig, setShowKitchenConfig] = useState(false);
       const [selectedRecipeId, setSelectedRecipeId] = useState(null);
@@ -287,7 +287,7 @@
       // 1. Memuat data saat aplikasi pertama kali dijalankan
       const fetchData = (user, pass) => {
         setIsRefreshing(true);
-        fetch(`${API_URL}?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}`)
+        fetch(`${API_URL}?username=${encodeURIComponent(user)}&password=${encodeURIComponent(pass)}&t=${Date.now()}`)
           .then(res => res.json())
           .then(res => {
             if (res.status === 'success') {
@@ -358,7 +358,7 @@
           autoRefreshRef.current = setInterval(() => {
             if (Date.now() - lastMutationTimeRef.current < 20000) return;
             setIsRefreshing(true);
-            fetch(`${API_URL}?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`)
+            fetch(`${API_URL}?username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&t=${Date.now()}`)
               .then(res => res.json())
               .then(res => {
                 if (res.status === 'success') {
@@ -1011,8 +1011,8 @@
       };
 
       // --- INVENTORY (SALES & ADJUSTMENTS) ---
-      const [newSale, setNewSale] = useState({ date: new Date().toISOString().split('T')[0], recipeId: '', quantitySold: '' });
-      const [newAdjustment, setNewAdjustment] = useState({ date: new Date().toISOString().split('T')[0], itemName: '', quantity: '', reason: '' });
+      const [newSale, setNewSale] = useState({ date: formatDateLocal(new Date()), recipeId: '', quantitySold: '' });
+      const [newAdjustment, setNewAdjustment] = useState({ date: formatDateLocal(new Date()), itemName: '', quantity: '', reason: '' });
 
       const handleAddSale = (e) => {
         e.preventDefault();
@@ -1804,7 +1804,7 @@
                               return (
                                 <tr key={p.id} className="bg-blue-50/50">
                                   <td className="p-3">
-                                    <input type="date" className="p-2 border border-slate-200 rounded-lg w-[125px] text-sm outline-none focus:border-blue-500" value={editPurchaseData.date.split('T')[0]} onChange={e => setEditPurchaseData({ ...editPurchaseData, date: e.target.value })} />
+                                    <input type="date" className="p-2 border border-slate-200 rounded-lg w-[125px] text-sm outline-none focus:border-blue-500" value={formatDateLocal(editPurchaseData.date)} onChange={e => setEditPurchaseData({ ...editPurchaseData, date: e.target.value })} />
                                   </td>
                                   <td className="p-3">
                                     <input type="text" className="p-2 border border-slate-200 rounded-lg w-full text-sm outline-none focus:border-blue-500" value={editPurchaseData.itemName} onChange={e => setEditPurchaseData({ ...editPurchaseData, itemName: e.target.value })} />
@@ -1850,7 +1850,7 @@
                             }
                             return (
                               <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                                <td className="p-3 text-slate-600">{p.date.split('T')[0]}</td>
+                                <td className="p-3 text-slate-600">{formatDateLocal(p.date)}</td>
                                 <td className="p-3 font-semibold text-slate-800">{p.itemName}</td>
                                 <td className="p-3 text-slate-600">{p.quantity} {p.unit}</td>
                                 <td className="p-3 text-right text-emerald-600 font-bold bg-emerald-50/30">{formatRp(p.totalPrice / p.quantity)}</td>
