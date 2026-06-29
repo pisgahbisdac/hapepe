@@ -991,6 +991,61 @@
         document.body.removeChild(link);
       };
 
+      const handleExportSimulasiExcel = () => {
+        const headers = ['Nama Menu', 'Target Terjual (Porsi)'];
+        const rows = recipes.filter(r => r.recipeType !== 'sub').map(recipe => {
+          const qty = salesSimulation[recipe.id] || 0;
+          return [
+            `"${recipe.menuName.replace(/"/g, '""')}"`,
+            qty
+          ];
+        });
+
+        const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Simulasi_Bisnis.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
+      const handleImportSimulasiExcel = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const text = event.target.result;
+          const lines = text.split('\n');
+          const newSimulasi = { ...salesSimulation };
+          
+          for (let i = 1; i < lines.length; i++) {
+            let line = lines[i].trim();
+            if (!line) continue;
+            
+            // Handle quotes properly in CSV
+            const matches = line.match(/(?:"([^"]*(?:""[^"]*)*)"|([^,]+))/g);
+            if (matches && matches.length >= 2) {
+              let menuName = matches[0].replace(/^"|"$/g, '').replace(/""/g, '"');
+              let qtyRaw = matches[1].replace(/,/g, '').replace(/"/g, '');
+              let qty = parseFloat(qtyRaw);
+              
+              const recipe = recipes.find(r => r.menuName === menuName && r.recipeType !== 'sub');
+              if (recipe && !isNaN(qty) && qty > 0) {
+                newSimulasi[recipe.id] = qty;
+              } else if (recipe && (isNaN(qty) || qty === 0)) {
+                 delete newSimulasi[recipe.id];
+              }
+            }
+          }
+          setSalesSimulation(newSimulasi);
+          e.target.value = ''; // reset file input
+        };
+        reader.readAsText(file);
+      };
+
       const handleExportKatalogExcel = () => {
         const headers = ['Kategori', 'Nama Menu', 'HPP / Porsi', 'Margin (%)', 'Harga Jual Ideal'];
         const rows = recipes.filter(r => r.recipeType !== 'sub').map(recipe => {
@@ -3077,9 +3132,20 @@
                       <h3 className="font-bold text-slate-800"><i className="fas fa-list-ol mr-2"></i>Target Penjualan per Menu</h3>
                       <p className="text-sm text-slate-500 mt-1">Masukkan perkiraan porsi yang terjual dalam 1 bulan untuk melihat simulasi.</p>
                     </div>
-                    <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 w-full md:w-auto">
-                      <i className="fas fa-search text-slate-400"></i>
-                      <input type="text" placeholder="Cari menu..." className="outline-none text-sm bg-transparent w-full md:w-48" value={searchSimulasi} onChange={e => setSearchSimulasi(e.target.value)} />
+                    <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
+                      <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-3 py-2 w-full md:w-auto">
+                        <i className="fas fa-search text-slate-400"></i>
+                        <input type="text" placeholder="Cari menu..." className="outline-none text-sm bg-transparent w-full md:w-48" value={searchSimulasi} onChange={e => setSearchSimulasi(e.target.value)} />
+                      </div>
+                      <div className="flex gap-2 w-full md:w-auto justify-end">
+                        <button onClick={handleExportSimulasiExcel} className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 px-3 py-2 rounded-lg transition-colors font-bold text-sm flex items-center gap-2 justify-center flex-1 md:flex-none">
+                          <i className="fas fa-download"></i> Ekspor CSV
+                        </button>
+                        <label className="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3 py-2 rounded-lg transition-colors font-bold text-sm flex items-center gap-2 cursor-pointer justify-center flex-1 md:flex-none">
+                          <i className="fas fa-upload"></i> Impor CSV
+                          <input type="file" accept=".csv" className="hidden" onChange={handleImportSimulasiExcel} />
+                        </label>
+                      </div>
                     </div>
                   </div>
                   <div className="p-0">
