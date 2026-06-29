@@ -2879,7 +2879,7 @@
                         </div>
                         <div className="p-3 flex flex-col h-full">
                           <h3 className="font-black text-sm text-slate-800 mb-2 line-clamp-2 leading-tight">{recipe.menuName}</h3>
-                          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100 mb-4 w-max" title="Berdasarkan sisa stok inventori">
+                          <div className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded border mb-4 w-max ${calculateMaxPortions(recipe.id) === 0 ? 'text-rose-600 bg-rose-50 border-rose-200' : 'text-emerald-600 bg-emerald-50 border-emerald-100'}`} title="Berdasarkan sisa stok inventori">
                             <i className="fas fa-boxes"></i> Bisa dibuat: {calculateMaxPortions(recipe.id)} {recipe.yieldUnit}
                           </div>
                           <div className="flex justify-between items-center pt-4 border-t border-slate-100">
@@ -2937,7 +2937,7 @@
                         <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
                           <i className="fas fa-check-circle"></i> Resep untuk {formatNum(getRecipeYield(recipe).qty)} {getRecipeYield(recipe).unit}
                         </div>
-                        <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200" title="Berdasarkan stok bahan baku yang tersisa di inventori saat ini">
+                        <div className={`inline-flex items-center gap-2 text-xs font-bold px-3 py-1 rounded-full border ${calculateMaxPortions(recipe.id) === 0 ? 'text-rose-600 bg-rose-50 border-rose-200' : 'text-emerald-600 bg-emerald-50 border-emerald-200'}`} title="Berdasarkan stok bahan baku yang tersisa di inventori saat ini">
                           <i className="fas fa-boxes"></i> Bisa dibuat: {calculateMaxPortions(recipe.id)} {getRecipeYield(recipe).unit}
                         </div>
                       </div>

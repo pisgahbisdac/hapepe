@@ -445,7 +445,7 @@
                               <i className="fas fa-exclamation-triangle"></i> Menunggu Resep
                             </span>
                           )}
-                          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-sky-700 bg-sky-50 px-2 py-1 rounded border border-sky-200 shadow-sm">
+                          <span className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded border shadow-sm ${calculateMaxPortions(recipe.id) === 0 ? 'text-rose-700 bg-rose-50 border-rose-200' : 'text-sky-700 bg-sky-50 border-sky-200'}`}>
                             <i className="fas fa-boxes"></i> Bisa dibuat: {formatNum(calculateMaxPortions(recipe.id))} {getRecipeYield(recipe).unit}
                           </span>
                         </div>
@@ -517,7 +517,7 @@
                         <div className="inline-flex items-center gap-2 text-sm font-bold text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-full shadow-sm">
                           <i className="fas fa-utensils"></i> Resep {formatNum(yieldQty)} {yieldUnit}
                         </div>
-                        <div className="inline-flex items-center gap-2 text-sm font-bold text-sky-700 bg-sky-100 px-3 py-1.5 rounded-full shadow-sm" title="Berdasarkan stok bahan baku yang tersisa di inventori saat ini">
+                        <div className={`inline-flex items-center gap-2 text-sm font-bold px-3 py-1.5 rounded-full shadow-sm ${calculateMaxPortions(recipe.id) === 0 ? 'text-rose-700 bg-rose-100' : 'text-sky-700 bg-sky-100'}`} title="Berdasarkan stok bahan baku yang tersisa di inventori saat ini">
                           <i className="fas fa-boxes"></i> Bisa dibuat: {formatNum(calculateMaxPortions(recipe.id))} {yieldUnit}
                         </div>
                       </div>
