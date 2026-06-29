@@ -68,7 +68,7 @@ function setup() {
   let butcherSheet = ss.getSheetByName(SHEET_BUTCHER);
   if (!butcherSheet) {
     butcherSheet = ss.insertSheet(SHEET_BUTCHER);
-    butcherSheet.appendRow(['ID', 'ItemName', 'NetWeight', 'ImageURL', 'Category']);
+    butcherSheet.appendRow(['ID', 'ItemName', 'NetWeight', 'ImageURL', 'Category', 'Details']);
     butcherSheet.getRange("A1:E1").setFontWeight("bold");
   }
 
@@ -284,16 +284,20 @@ function doGet(e) {
     let butcherItems = [];
     if (butcherSheet) {
       const headers = butcherSheet.getRange(1, 1, 1, butcherSheet.getLastColumn()).getValues()[0];
-      if (headers.indexOf('Category') === -1) {
-        butcherSheet.getRange(1, headers.length + 1).setValue('Category');
-      }
-      butcherItems = readSheetData(butcherSheet).map(row => ({
-        id: row.ID,
-        itemName: row.ItemName,
-        netWeight: row.NetWeight,
-        imageUrl: row.ImageURL,
-        category: row.Category || 'Bahan Baku & Potongan'
-      }));
+        if (headers.indexOf('Category') === -1) {
+          butcherSheet.getRange(1, headers.length + 1).setValue('Category');
+        }
+        if (headers.indexOf('Details') === -1) {
+          butcherSheet.getRange(1, butcherSheet.getLastColumn() + 1).setValue('Details');
+        }
+        butcherItems = readSheetData(butcherSheet).map(row => ({
+          id: row.ID,
+          itemName: row.ItemName,
+          netWeight: row.NetWeight,
+          imageUrl: row.ImageURL,
+          category: row.Category || 'Bahan Baku & Potongan',
+          details: row.Details || ''
+        }));
     }
 
     const response = {
@@ -506,13 +510,17 @@ function doPost(e) {
         if (headers.indexOf('Category') === -1) {
           butcherSheet.getRange(1, headers.length + 1).setValue('Category');
         }
+        if (headers.indexOf('Details') === -1) {
+          butcherSheet.getRange(1, butcherSheet.getLastColumn() + 1).setValue('Details');
+        }
         
         butcherItems = readSheetData(butcherSheet).map(row => ({
           id: row.ID,
           itemName: row.ItemName,
           netWeight: row.NetWeight,
           imageUrl: row.ImageURL,
-          category: row.Category || 'Bahan Baku & Potongan'
+          category: row.Category || 'Bahan Baku & Potongan',
+          details: row.Details || ''
         }));
       }
       return createJsonResponse({ status: 'success', data: butcherItems });
@@ -656,8 +664,11 @@ function doPost(e) {
         if (headers.indexOf('Category') === -1) {
           bSheet.getRange(1, headers.length + 1).setValue('Category');
         }
+        if (headers.indexOf('Details') === -1) {
+          bSheet.getRange(1, bSheet.getLastColumn() + 1).setValue('Details');
+        }
         
-        bSheet.appendRow([data.id, data.itemName, data.netWeight, data.imageUrl || '', data.category || 'Bahan Baku & Potongan']);
+        bSheet.appendRow([data.id, data.itemName, data.netWeight, data.imageUrl || '', data.category || 'Bahan Baku & Potongan', data.details || '']);
         result = { message: "Item butcher ditambahkan" };
         logAudit(ss, username, 'Tambah Butcher', `Menambah item butcher: ${data.itemName} (${data.netWeight})`);
         break;
@@ -670,8 +681,11 @@ function doPost(e) {
           if (editHeaders.indexOf('Category') === -1) {
             bSheetEdit.getRange(1, editHeaders.length + 1).setValue('Category');
           }
+          if (editHeaders.indexOf('Details') === -1) {
+            bSheetEdit.getRange(1, bSheetEdit.getLastColumn() + 1).setValue('Details');
+          }
         }
-        result = editRowById(SHEET_BUTCHER, data.id, [data.id, data.itemName, data.netWeight, data.imageUrl || '', data.category || 'Bahan Baku & Potongan']);
+        result = editRowById(SHEET_BUTCHER, data.id, [data.id, data.itemName, data.netWeight, data.imageUrl || '', data.category || 'Bahan Baku & Potongan', data.details || '']);
         logAudit(ss, username, 'Edit Butcher', `Mengubah item butcher: ${data.itemName}`);
         break;
 

@@ -298,7 +298,7 @@
       const [isCreatingNewRecipe, setIsCreatingNewRecipe] = useState(false);
       const [newIngredient, setNewIngredient] = useState({ itemName: '', quantity: '' });
 
-      const [newButcherItem, setNewButcherItem] = useState({ itemName: '', netWeight: '', category: 'Bahan Baku & Potongan' });
+      const [newButcherItem, setNewButcherItem] = useState({ itemName: '', netWeight: '', category: '', details: '' });
       const [editingButcherItem, setEditingButcherItem] = useState(null);
 
       // ==========================================
@@ -1441,10 +1441,10 @@
       const handleAddButcherItem = (e) => {
         e.preventDefault();
         if (!newButcherItem.itemName || !newButcherItem.netWeight) return;
-        const bData = { id: Date.now(), itemName: newButcherItem.itemName, netWeight: newButcherItem.netWeight, category: newButcherItem.category, imageUrl: '' };
+        const bData = { id: Date.now(), itemName: newButcherItem.itemName, netWeight: newButcherItem.netWeight, category: newButcherItem.category, details: newButcherItem.details, imageUrl: '' };
         setButcherItems([...butcherItems, bData]);
         sendApiRequest('addButcherItem', bData);
-        setNewButcherItem({ itemName: '', netWeight: '', category: 'Bahan Baku & Potongan' });
+        setNewButcherItem({ itemName: '', netWeight: '', category: '', details: '' });
       };
 
       const handleSaveButcherItem = (id) => {
@@ -3900,11 +3900,20 @@
                 <h2 className="text-xl font-bold text-red-800"><i className="fas fa-drumstick-bite mr-2"></i> Pengaturan Menu Butcher</h2>
               </div>
               <div className="p-6">
-                <form onSubmit={handleAddButcherItem} className="flex flex-col md:flex-row gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <input type="text" placeholder="Bahan Butcher (contoh: Daging Sapi Slice)" className="flex-1 p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-red-500 font-medium" value={newButcherItem.itemName} onChange={e => setNewButcherItem({ ...newButcherItem, itemName: e.target.value })} required />
-                  <input type="text" placeholder="Berat Bersih (contoh: 500g)" className="w-full md:w-1/4 p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-red-500 font-medium" value={newButcherItem.netWeight} onChange={e => setNewButcherItem({ ...newButcherItem, netWeight: e.target.value })} required />
-                  <input type="text" placeholder="Kategori/Subteks" className="w-full md:w-1/4 p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-red-500 font-medium" value={newButcherItem.category} onChange={e => setNewButcherItem({ ...newButcherItem, category: e.target.value })} required list="butcher-inventory-list" />
-                  <button type="submit" className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md shadow-red-500/20 whitespace-nowrap">
+                <form onSubmit={handleAddButcherItem} className="flex flex-col md:flex-row gap-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100 flex-wrap">
+                  <div className="flex-1 min-w-[200px]">
+                    <input type="text" placeholder="Bahan Butcher (contoh: Daging Sapi Slice)" className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-red-500 font-medium" value={newButcherItem.itemName} onChange={e => setNewButcherItem({ ...newButcherItem, itemName: e.target.value })} required />
+                  </div>
+                  <div className="flex-1 min-w-[200px]">
+                    <input type="text" placeholder="Detail Bahan (contoh: Slice 1mm)" className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-red-500 font-medium" value={newButcherItem.details} onChange={e => setNewButcherItem({ ...newButcherItem, details: e.target.value })} />
+                  </div>
+                  <div className="w-full md:w-1/5 min-w-[150px]">
+                    <input type="text" placeholder="Berat Bersih" className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-red-500 font-medium" value={newButcherItem.netWeight} onChange={e => setNewButcherItem({ ...newButcherItem, netWeight: e.target.value })} required />
+                  </div>
+                  <div className="w-full md:w-1/4 min-w-[200px]">
+                    <input type="text" placeholder="Kategori/Subteks" className="w-full p-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-red-500 font-medium" value={newButcherItem.category} onChange={e => setNewButcherItem({ ...newButcherItem, category: e.target.value })} list="butcher-inventory-list" />
+                  </div>
+                  <button type="submit" className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md shadow-red-500/20 whitespace-nowrap self-end">
                     <i className="fas fa-plus mr-2"></i> Tambah
                   </button>
                 </form>
@@ -3921,6 +3930,7 @@
                       <tr className="border-b border-slate-200 bg-slate-50 text-slate-500 uppercase text-xs">
                         <th className="p-4 font-bold rounded-tl-xl w-32">Gambar</th>
                         <th className="p-4 font-bold">Nama Bahan</th>
+                        <th className="p-4 font-bold">Detail</th>
                         <th className="p-4 font-bold">Kategori / Subteks</th>
                         <th className="p-4 font-bold">Berat Bersih / Pack</th>
                         <th className="p-4 font-bold text-center rounded-tr-xl w-24">Aksi</th>
@@ -3957,9 +3967,16 @@
                             </td>
                             <td className="p-3">
                               {isEditing ? (
+                                <input type="text" placeholder="Detail Bahan (opsional)" className="w-full p-2 border border-slate-200 rounded-lg font-medium text-emerald-600" value={editingButcherItem.details} onChange={e => setEditingButcherItem({ ...editingButcherItem, details: e.target.value })} />
+                              ) : (
+                                <span className="text-emerald-600 text-sm font-medium">{item.details || '-'}</span>
+                              )}
+                            </td>
+                            <td className="p-3">
+                              {isEditing ? (
                                 <input type="text" className="w-full p-2 border border-slate-200 rounded-lg font-medium" value={editingButcherItem.category} onChange={e => setEditingButcherItem({ ...editingButcherItem, category: e.target.value })} list="butcher-inventory-list" />
                               ) : (
-                                <span className="text-slate-600 text-sm">{item.category || 'Bahan Baku & Potongan'}</span>
+                                <span className="text-slate-600 text-sm">{item.category || '-'}</span>
                               )}
                             </td>
                             <td className="p-3">
