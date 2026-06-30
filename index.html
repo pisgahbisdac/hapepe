@@ -1409,7 +1409,18 @@
             const updatedIds = new Set(newRecipesMap.map(r => r.id));
             const mergedRecipes = recipes.filter(r => !updatedIds.has(r.id)).concat(newRecipesMap);
             setRecipes(mergedRecipes);
-            sendApiRequest('updateMultipleRecipes', { recipes: newRecipesMap });
+            
+            const payloadRecipes = newRecipesMap.map(recipe => ({
+              ...recipe,
+              ingredients: [
+                ...recipe.ingredients,
+                { id: 'META_YIELD', qty: recipe.yieldQty || 1, unit: recipe.yieldUnit || 'porsi', type: recipe.recipeType || 'final' },
+                { itemName: 'META_STATUS', quantity: recipe.isActive === false ? 'false' : 'true' },
+                { itemName: 'META_MENU_CATEGORY', quantity: recipe.menuCategory || '' }
+              ]
+            }));
+            
+            sendApiRequest('updateMultipleRecipes', { recipes: payloadRecipes });
           }
           e.target.value = '';
         };
