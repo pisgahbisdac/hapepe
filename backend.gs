@@ -744,6 +744,7 @@ function readSheetData(sheet) {
   const rows = [];
   
   for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim() === "") continue;
     let rowObj = {};
     for (let j = 0; j < headers.length; j++) {
       let val = data[i][j];
@@ -920,7 +921,10 @@ function updateRecipeRow(recipeData) {
 function updateMultipleRecipes(recipesList) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName(SHEET_RECIPES);
-  const data = sheet.getDataRange().getValues();
+  let data = sheet.getDataRange().getValues();
+  
+  // Filter out completely empty rows (where ID is missing) to shrink data
+  data = data.filter((row, idx) => idx === 0 || String(row[0]).trim() !== "");
   
   const existingRowMap = new Map();
   for (let i = 1; i < data.length; i++) {
