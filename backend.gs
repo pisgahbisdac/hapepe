@@ -922,30 +922,36 @@ function updateMultipleRecipes(recipesList) {
   const sheet = ss.getSheetByName(SHEET_RECIPES);
   const data = sheet.getDataRange().getValues();
   
-  let maxColsNeeded = 0;
   const existingRowMap = new Map();
   for (let i = 1; i < data.length; i++) {
-    existingRowMap.set(String(data[i][0]), i + 1);
+    existingRowMap.set(String(data[i][0]), i);
   }
   
-  const lastRow = sheet.getLastRow();
-  let nextNewRow = lastRow + 1;
-  const lastCol = sheet.getLastColumn();
+  let maxColsNeeded = data.length > 0 ? data[0].length : 0;
   
   for (const recipe of recipesList) {
     const newRowData = addRecipeRowData(recipe);
     maxColsNeeded = Math.max(maxColsNeeded, newRowData.length);
     
     if (existingRowMap.has(String(recipe.id))) {
-      const rowNum = existingRowMap.get(String(recipe.id));
-      if (lastCol > 0) {
-        sheet.getRange(rowNum, 1, 1, lastCol).clearContent();
-      }
-      sheet.getRange(rowNum, 1, 1, newRowData.length).setValues([newRowData]);
+      const rowIndex = existingRowMap.get(String(recipe.id));
+      data[rowIndex] = newRowData;
     } else {
-      sheet.getRange(nextNewRow, 1, 1, newRowData.length).setValues([newRowData]);
-      nextNewRow++;
+      data.push(newRowData);
+      existingRowMap.set(String(recipe.id), data.length - 1);
     }
+  }
+  
+  // Pad all rows to match maxColsNeeded
+  for (let i = 0; i < data.length; i++) {
+    while (data[i].length < maxColsNeeded) {
+      data[i].push("");
+    }
+  }
+  
+  sheet.clearContent();
+  if (data.length > 0) {
+    sheet.getRange(1, 1, data.length, maxColsNeeded).setValues(data);
   }
   
   ensureRecipeHeaders(ss, Math.floor((maxColsNeeded - 7) / 3));
