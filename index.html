@@ -2208,7 +2208,15 @@
                 setLoginError('');
                 
                 fetch(`${API_URL}?action=login_verify&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&t=${Date.now()}`)
-                  .then(res => res.json())
+                  .then(async res => {
+                    const contentType = res.headers.get("content-type");
+                    if (contentType && contentType.includes("application/json")) {
+                      return res.json();
+                    } else {
+                      const text = await res.text();
+                      throw new Error(text.includes("<html") ? "Google memblokir koneksi (Kemungkinan Multi-Akun Google / Buka di Tab Incognito)" : "Koneksi terputus.");
+                    }
+                  })
                   .then(res => {
                     if (res.status === 'success') {
                       setLoginStep('downloading');
@@ -2216,13 +2224,15 @@
                     } else {
                       setIsLoggingIn(false);
                       setLoginStep('idle');
+                      setServerStatus('disconnected');
                       setLoginError(res.message || 'Sandi salah');
                     }
                   })
                   .catch(err => {
                     setIsLoggingIn(false);
                     setLoginStep('idle');
-                    setLoginError('Koneksi gagal.');
+                    setServerStatus('disconnected');
+                    setLoginError(err.message || 'Koneksi gagal.');
                   });
               }}>
                 <div className="mb-4 relative">
