@@ -157,9 +157,6 @@ function doGet(e) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     
-    // Auto-setup / Self-heal missing sheets
-    try { setup(); } catch (err) { console.warn("Auto-setup failed: " + err); }
-    
     // Auth Check
     const username = e && e.parameter ? e.parameter.username : '';
     const password = e && e.parameter ? e.parameter.password : '';
@@ -383,9 +380,6 @@ function doPost(e) {
   try {
     const payload = JSON.parse(e.postData.contents);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    
-    // Auto-setup / Self-heal missing sheets
-    try { setup(); } catch (err) { console.warn("Auto-setup failed: " + err); }
     
     // Public Endpoints (No Auth Required)
     if (payload.action === 'getPublicRecipes') {
