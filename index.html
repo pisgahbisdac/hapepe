@@ -1118,6 +1118,27 @@
         reader.readAsText(file);
       };
 
+      const handleExportRecipeIDs = () => {
+        const headers = ['Recipe ID', 'Nama Menu', 'Kategori', 'Tipe Resep'];
+        const rows = recipes.map(r => {
+          return [
+            `"${r.id}"`,
+            `"${r.menuName.replace(/"/g, '""')}"`,
+            `"${r.menuCategory || '-'}"`,
+            `"${r.recipeType === 'sub' ? 'Bahan Setengah Jadi' : 'Menu Utama'}"`
+          ];
+        });
+        const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Daftar_ID_Resep.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      };
+
       const handleExportSalesExcel = () => {
         const headers = ['Tanggal', 'Nama Menu Terjual', 'Jumlah Terjual (Porsi)'];
         const rows = sales.map(s => {
@@ -3869,8 +3890,11 @@
                       <div className="flex items-center gap-2">
                         <i className="fas fa-cash-register"></i> Input Penjualan
                       </div>
-                      <div className="flex gap-2">
-                         <button onClick={handleExportSalesExcel} className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs flex items-center gap-2">
+                      <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+                         <button type="button" onClick={handleExportRecipeIDs} className="bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs flex items-center gap-2" title="Unduh Referensi ID Menu untuk Keperluan Impor">
+                          <i className="fas fa-list-ol"></i> Referensi ID Menu
+                         </button>
+                         <button type="button" onClick={handleExportSalesExcel} className="bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs flex items-center gap-2">
                           <i className="fas fa-download"></i> Ekspor CSV
                          </button>
                          <label className="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg transition-colors font-bold text-xs flex items-center gap-2 cursor-pointer">
