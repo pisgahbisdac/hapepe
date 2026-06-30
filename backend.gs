@@ -949,12 +949,19 @@ function updateMultipleRecipes(recipesList) {
     }
   }
   
+  // Ensure the sheet has enough columns before attempting to set values
+  ensureRecipeHeaders(ss, Math.floor((maxColsNeeded - 7) / 3));
+  
+  // Ensure the sheet has enough rows
+  if (data.length > sheet.getMaxRows()) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), data.length - sheet.getMaxRows());
+  }
+  
   sheet.clearContents();
   if (data.length > 0) {
     sheet.getRange(1, 1, data.length, maxColsNeeded).setValues(data);
   }
   
-  ensureRecipeHeaders(ss, Math.floor((maxColsNeeded - 7) / 3));
   return { message: "Multiple recipes updated successfully" };
 }
 
