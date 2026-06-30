@@ -1164,7 +1164,7 @@
             let quantitySold = parseFloat(parseField(matches[2])) || 0;
             
             if (date && menuName && quantitySold > 0) {
-              const matchedRecipe = recipes.find(r => r.menuName === menuName && r.recipeType !== 'sub');
+              const matchedRecipe = recipes.find(r => String(r.menuName).toLowerCase().trim() === String(menuName).toLowerCase().trim() && r.recipeType !== 'sub');
               newSales.push({
                 id: Date.now() + Math.floor(Math.random() * 100000) + i,
                 date: date,
@@ -3972,9 +3972,9 @@
 
                       dailySales.forEach(sale => {
                         const recipe = recipes.find(r => 
-                          String(r.id) === String(sale.recipeId) || 
-                          String(r.menuName).toLowerCase() === String(sale.recipeId).toLowerCase() ||
-                          String(r.menuName).toLowerCase() === String(sale.menuName).toLowerCase()
+                          String(r.id).trim() === String(sale.recipeId).trim() || 
+                          String(r.menuName).toLowerCase().trim() === String(sale.recipeId).toLowerCase().trim() ||
+                          (sale.menuName && String(r.menuName).toLowerCase().trim() === String(sale.menuName).toLowerCase().trim())
                         );
                         if (recipe) {
                           // Calculate single yield HPP

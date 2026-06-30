@@ -470,7 +470,8 @@ function doPost(e) {
             id: sData[i][0],
             date: sData[i][1],
             recipeId: sData[i][2],
-            quantitySold: Number(sData[i][3])
+            quantitySold: Number(sData[i][3]),
+            menuName: sData[i][4]
           });
         }
       }
