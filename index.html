@@ -248,6 +248,7 @@
       const [isLoggedIn, setIsLoggedIn] = useState(false);
       const [username, setUsername] = useState('');
       const [password, setPassword] = useState('');
+      const [showPassword, setShowPassword] = useState(false);
       const [userRole, setUserRole] = useState('');
       const [userPermissions, setUserPermissions] = useState([]);
       const [usersList, setUsersList] = useState([]);
@@ -256,6 +257,7 @@
       const [searchAudit, setSearchAudit] = useState('');
       const [loginError, setLoginError] = useState('');
       const [isLoggingIn, setIsLoggingIn] = useState(false);
+      const [serverStatus, setServerStatus] = useState('checking'); // 'checking' | 'connected' | 'disconnected'
 
       // State (awalnya kosong, diisi dari Spreadsheet)
       const [purchases, setPurchases] = useState([]);
@@ -380,6 +382,35 @@
       const toastTimeoutRef = React.useRef(null);
       const autoRefreshRef = React.useRef(null);
       const lastMutationTimeRef = React.useRef(0);
+
+      React.useEffect(() => {
+        let isMounted = true;
+        let retryCount = 0;
+        
+        const checkConnection = () => {
+          fetch(`${API_URL}?t=${Date.now()}`)
+            .then(res => res.json())
+            .then(res => {
+              if (isMounted && res) setServerStatus('connected');
+            })
+            .catch(err => {
+              if (isMounted) {
+                if (retryCount < 3) {
+                  retryCount++;
+                  setTimeout(checkConnection, 3000);
+                } else {
+                  setServerStatus('disconnected');
+                  // Keep trying every 10 seconds in the background
+                  setTimeout(checkConnection, 10000);
+                }
+              }
+            });
+        };
+        
+        checkConnection();
+        
+        return () => { isMounted = false; };
+      }, []);
 
       React.useEffect(() => {
         if (isLoggedIn && username && password) {
@@ -1210,7 +1241,16 @@
 
       const handleExportPurchasesExcel = () => {
         const headers = ['Tanggal', 'Nama Bahan', 'Kuantitas', 'Satuan', 'Total Bayar'];
-        const rows = purchases.map(p => {
+        
+        const filteredPurchases = purchases.filter(p => {
+          const itemName = String(p.itemName || '').toLowerCase();
+          const itemDate = String(p.date || '');
+          if (searchBahan && !itemName.includes(searchBahan.toLowerCase())) return false;
+          if (filterBulan && !itemDate.startsWith(filterBulan)) return false;
+          return true;
+        }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        const rows = filteredPurchases.map(p => {
           return [
             `"${p.date}"`,
             `"${p.itemName.replace(/"/g, '""')}"`,
@@ -2152,11 +2192,17 @@
                 </div>
                 <h1 className="text-2xl font-bold text-white mb-2 tracking-tight">FoodCost Pro</h1>
                 <p className="text-emerald-200/80 text-sm">Silakan masukkan username dan sandi untuk mengakses data.</p>
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  {serverStatus === 'checking' && <><i className="fas fa-spinner fa-spin text-slate-400"></i> <span className="text-slate-400 text-xs">Memeriksa koneksi...</span></>}
+                  {serverStatus === 'connected' && <><i className="fas fa-wifi text-emerald-400"></i> <span className="text-emerald-400 text-xs">Terhubung ke server</span></>}
+                  {serverStatus === 'disconnected' && <><i className="fas fa-unlink text-red-400"></i> <span className="text-red-400 text-xs">Tidak ada koneksi</span></>}
+                </div>
               </div>
 
               <form onSubmit={(e) => {
                 e.preventDefault();
                 setIsLoggingIn(true);
+                setServerStatus('checking');
                 fetchData(username, password);
               }}>
                 <div className="mb-4 relative">
@@ -2173,13 +2219,20 @@
                 <div className="mb-6 relative">
                   <i className="fas fa-key absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder="Kata Sandi"
-                    className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl outline-none focus:border-emerald-500 focus:bg-white/10 text-white placeholder-slate-400 transition-all"
+                    className="w-full pl-12 pr-12 py-3 bg-white/5 border border-white/10 rounded-xl outline-none focus:border-emerald-500 focus:bg-white/10 text-white placeholder-slate-400 transition-all"
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     required
                   />
+                  <button 
+                    type="button" 
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                  >
+                    <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                  </button>
                 </div>
 
                 {loginError && <div className="mb-4 text-red-400 text-sm text-center bg-red-400/10 p-2 rounded-lg border border-red-400/20">{loginError}</div>}
@@ -2433,15 +2486,17 @@
                           .filter(p => {
                             const itemName = String(p.itemName || '').toLowerCase();
                             const itemDate = String(p.date || '');
-                            if (searchBahan && !itemName.includes(searchBahan.toLowerCase())) return false;
-                            if (filterBulan && !itemDate.startsWith(filterBulan)) return false;
-                            return true;
+                            
+                            const matchBahan = !searchBahan || itemName.includes(searchBahan.toLowerCase().trim());
+                            const matchBulan = !filterBulan || itemDate.startsWith(filterBulan);
+                            
+                            return matchBahan && matchBulan;
                           })
                           .sort((a, b) => new Date(b.date) - new Date(a.date))
-                          .map(p => {
+                          .map((p, idx) => {
                             if (editingPurchaseId === p.id) {
                               return (
-                                <tr key={p.id} className="bg-blue-50/50">
+                                <tr key={p.id || `purchase-${idx}`} className="bg-blue-50/50">
                                   <td className="p-3">
                                     <input type="date" className="p-2 border border-slate-200 rounded-lg w-[125px] text-sm outline-none focus:border-blue-500" value={formatDateLocal(editPurchaseData.date)} onChange={e => setEditPurchaseData({ ...editPurchaseData, date: e.target.value })} />
                                   </td>
@@ -2488,7 +2543,7 @@
                               );
                             }
                             return (
-                              <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                              <tr key={p.id || `purchase-${idx}`} className="hover:bg-slate-50 transition-colors">
                                 <td className="p-3 text-slate-600">{formatDateLocal(p.date)}</td>
                                 <td className="p-3 font-semibold text-slate-800">{p.itemName}</td>
                                 <td className="p-3 text-slate-600">{p.quantity} {p.unit}</td>
