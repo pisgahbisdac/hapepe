@@ -949,7 +949,7 @@ function updateMultipleRecipes(recipesList) {
     }
   }
   
-  sheet.clearContent();
+  sheet.clearContents();
   if (data.length > 0) {
     sheet.getRange(1, 1, data.length, maxColsNeeded).setValues(data);
   }
