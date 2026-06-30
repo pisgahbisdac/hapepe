@@ -40,10 +40,10 @@
       }, []);
 
       const selectedOption = options.find(o => String(o.value) === String(value));
-      
+
       return (
         <div className={`relative ${className?.includes('w-') ? '' : 'w-full'}`} ref={containerRef} title={title}>
-          <button 
+          <button
             type="button"
             onClick={() => setIsOpen(!isOpen)}
             className={`text-left flex justify-between items-center outline-none bg-white border border-slate-200 rounded-xl hover:border-emerald-300 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all ${className}`}
@@ -130,7 +130,7 @@
         if (str === null || str === undefined || str === '') return 0;
         let s = String(str);
         if (s.includes(',')) {
-           s = s.replace(/\./g, '').replace(/,/g, '.');
+          s = s.replace(/\./g, '').replace(/,/g, '.');
         }
         const n = parseFloat(s);
         return isNaN(n) ? 0 : n;
@@ -545,7 +545,7 @@
                         const groupedIngredients = {};
                         const uncategorized = [];
                         let customCategoryOrder = [];
-                        
+
                         if (recipe.ingredients) {
                           const catOrderMeta = recipe.ingredients.find(i => i.itemName === 'META_CATEGORY_ORDER');
                           if (catOrderMeta && catOrderMeta.quantity) {
@@ -566,7 +566,7 @@
                         const sortedCategories = Object.keys(groupedIngredients).sort((a, b) => {
                           let idxA = customCategoryOrder.indexOf(a);
                           let idxB = customCategoryOrder.indexOf(b);
-                          
+
                           if (idxA === -1 && idxB === -1) {
                             if (a === 'OTHERS') return 1;
                             if (b === 'OTHERS') return -1;
