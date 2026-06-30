@@ -122,7 +122,9 @@
 
       const formatNum = (num) => {
         if (num === null || num === undefined) return '0';
-        return Number(num).toString().replace('.', ',');
+        const n = Number(num);
+        if (n % 1 === 0) return n.toLocaleString('id-ID');
+        return n.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
       };
 
       const parseNumberInput = (str) => {
