@@ -2767,7 +2767,7 @@
                                 const nameInput = document.getElementById('modal-menu-name-input');
                                 const currentName = nameInput ? nameInput.value : recipe.menuName;
 
-                                const isDuplicateName = recipes.some(r => r.id !== recipe.id && r.menuName.toLowerCase() === currentName.trim().toLowerCase());
+                                const isDuplicateName = recipes.some(r => String(r.id) !== String(recipe.id) && r.menuName.toLowerCase() === currentName.trim().toLowerCase());
                                 if (isDuplicateName) {
                                   alert('Maaf, nama resep ini sudah digunakan! Silakan ganti dengan nama lain agar tidak duplikat.');
                                   if (nameInput) nameInput.focus();
