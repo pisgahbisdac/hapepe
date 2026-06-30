@@ -749,7 +749,10 @@ function readSheetData(sheet) {
     for (let j = 0; j < headers.length; j++) {
       let val = data[i][j];
       if (val instanceof Date) {
-        val = Utilities.formatDate(val, Session.getScriptTimeZone(), "yyyy-MM-dd");
+        const y = val.getFullYear();
+        const m = String(val.getMonth() + 1).padStart(2, '0');
+        const d = String(val.getDate()).padStart(2, '0');
+        val = `${y}-${m}-${d}`;
       }
       rowObj[headers[j]] = val;
     }
