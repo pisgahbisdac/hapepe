@@ -294,6 +294,7 @@
       const [isUploadingImage, setIsUploadingImage] = useState(false);
       const [inventorySearch, setInventorySearch] = useState('');
       const [laporanPemakaianDate, setLaporanPemakaianDate] = useState(() => new Date().toISOString().split('T')[0]);
+      const [laporanPemakaianDateEnd, setLaporanPemakaianDateEnd] = useState(() => new Date().toISOString().split('T')[0]);
       const [selectedPriceDetailItem, setSelectedPriceDetailItem] = useState(null);
       const [selectedInventoryHistory, setSelectedInventoryHistory] = useState(null);
 
@@ -940,10 +941,13 @@
           }
           return formatDateLocal(dateStr);
         };
-        const dailySales = sales.filter(s => getNormalizedDate(String(s.date)) === laporanPemakaianDate);
+        const filteredSales = sales.filter(s => {
+          const d = getNormalizedDate(String(s.date));
+          return d >= laporanPemakaianDate && d <= laporanPemakaianDateEnd;
+        });
 
         const usageMap = new Map();
-        dailySales.forEach(sale => {
+        filteredSales.forEach(sale => {
           const recipe = recipes.find(r =>
             String(r.id) === String(sale.recipeId) ||
             String(r.menuName).toLowerCase() === String(sale.recipeId).toLowerCase() ||
@@ -980,7 +984,7 @@
 
         const headers = ['Tanggal', 'Nama Bahan', 'Total Terpakai', 'Satuan', 'Total Biaya (Rp)', 'Rincian Menu'];
         const rows = usageList.map(item => [
-          laporanPemakaianDate,
+          `${laporanPemakaianDate} s/d ${laporanPemakaianDateEnd}`,
           `"${item.itemName}"`,
           Number(item.totalQty.toFixed(2)),
           item.unit,
@@ -996,7 +1000,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.setAttribute('href', url);
-        a.setAttribute('download', `Laporan_Pemakaian_${laporanPemakaianDate}.csv`);
+        a.setAttribute('download', `Laporan_Pemakaian_${laporanPemakaianDate}_to_${laporanPemakaianDateEnd}.csv`);
         a.click();
       };
 
@@ -4106,8 +4110,10 @@
                         <i className="fas fa-download"></i> Ekspor CSV
                       </button>
                       <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg flex-1 sm:flex-none">
-                        <label className="text-sm font-semibold text-slate-600 hidden sm:block">Tanggal:</label>
+                        <label className="text-sm font-semibold text-slate-600 hidden sm:block">Dari:</label>
                         <input type="date" className="bg-transparent outline-none text-sm font-bold text-slate-800 w-full" value={laporanPemakaianDate} onChange={e => setLaporanPemakaianDate(e.target.value)} />
+                        <label className="text-sm font-semibold text-slate-600 hidden sm:block ml-2">Sampai:</label>
+                        <input type="date" className="bg-transparent outline-none text-sm font-bold text-slate-800 w-full" value={laporanPemakaianDateEnd} onChange={e => setLaporanPemakaianDateEnd(e.target.value)} />
                       </div>
                     </div>
                   </div>
@@ -4122,7 +4128,10 @@
                       }
                       return formatDateLocal(dateStr);
                     };
-                    const dailySales = sales.filter(s => getNormalizedDate(String(s.date)) === laporanPemakaianDate);
+                    const dailySales = sales.filter(s => {
+                      const d = getNormalizedDate(String(s.date));
+                      return d >= laporanPemakaianDate && d <= laporanPemakaianDateEnd;
+                    });
                     if (dailySales.length === 0) {
                       return (
                         <div className="p-8 text-center text-slate-400 border rounded-xl bg-slate-50 mt-4">
@@ -4154,7 +4163,8 @@
                           hpp1Yield += (reqQty * price);
                         }
                         const hppPerPorsi = hpp1Yield / recipeYield;
-                        const hargaJualIdealPerPorsi = hppPerPorsi / (1 - ((recipe.targetMarginPercent || 0) / 100));
+                        const rawHargaJual = hppPerPorsi / (1 - ((recipe.targetMarginPercent || 0) / 100));
+                        const hargaJualIdealPerPorsi = isFinite(rawHargaJual) && !isNaN(rawHargaJual) ? rawHargaJual : 0;
 
                         const hppTotalSale = hppPerPorsi * sale.quantitySold;
                         const revenueTotalSale = hargaJualIdealPerPorsi * sale.quantitySold;
@@ -4213,7 +4223,7 @@
                         {/* Ringkasan Penjualan Card */}
                         <div className="bg-slate-50 border border-slate-200 rounded-xl p-5">
                           <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4 flex items-center gap-2">
-                            <i className="fas fa-chart-pie text-emerald-500"></i> Ringkasan Penjualan ({laporanPemakaianDate})
+                            <i className="fas fa-chart-pie text-emerald-500"></i> Ringkasan Penjualan ({laporanPemakaianDate} s/d {laporanPemakaianDateEnd})
                           </h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                             <div className="bg-white p-4 rounded-lg border border-slate-100 shadow-sm">
